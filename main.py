@@ -1,9 +1,13 @@
 import asyncio
 import hashlib
+import json
 import os
+import sqlite3
 import time
+from datetime import datetime, timedelta
 
 import httpx
+import pytz
 import requests
 from pyrogram import Client
 
@@ -14,6 +18,56 @@ LAST_SUBMISSION_ID_FILE = "last_submission_id.txt"
 CODEFORCES_API_URL = "https://codeforces.com/api"
 LAST_LEETCODE_SUBMISSION_TIMESTAMP_FILE = "last_leetcode_submission_timestamp.txt"
 LEETCODE_API_URL = "https://leetcode.com/graphql"
+DB_FILE = "stats.db"
+DAILY_STATS_FILE = "daily_stats.json" # For migration
+
+
+def init_db():
+    """Initializes the database and creates tables if they don't exist."""
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS solved_problems (
+                platform TEXT,
+                problem_id TEXT,
+                first_solve_date TEXT,
+                PRIMARY KEY (platform, problem_id)
+            )
+        """)
+        conn.commit()
+
+
+def log_problem_solved(platform: str, problem_id: str):
+    """Logs a newly solved problem, ignoring duplicates across all time."""
+    solve_date = datetime.now(pytz.timezone(config.TIMEZONE)).strftime("%Y-%m-%d")
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO solved_problems (platform, problem_id, first_solve_date) VALUES (?, ?, ?)",
+                (platform, problem_id, solve_date)
+            )
+            conn.commit()
+            print(f"Logged new ALL-TIME unique solve: {platform} - {problem_id}")
+        except sqlite3.IntegrityError:
+            pass
+
+
+def get_daily_stats_from_db():
+    """Gets the count of unique problems first solved today from the database."""
+    solve_date = datetime.now(pytz.timezone(config.TIMEZONE)).strftime("%Y-%m-%d")
+    stats = {"codeforces": 0, "leetcode": 0}
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT platform, COUNT(problem_id) FROM solved_problems WHERE first_solve_date = ? GROUP BY platform",
+            (solve_date,)
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            if row[0] in stats:
+                stats[row[0]] = row[1]
+    return stats
 
 
 def get_last_submission_id():
@@ -194,6 +248,9 @@ async def check_codeforces_submissions(app: Client):
                         problem = submission["problem"]
                         problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
                         
+                        problem_id = f"{problem.get('contestId')}-{problem.get('index')}"
+                        log_problem_solved(platform="codeforces", problem_id=problem_id)
+                        
                         message = (
                             f"👾 **New Accepted Submission!**\n\n"
                             f"**Platform:** Codeforces\n"
@@ -261,6 +318,9 @@ async def check_leetcode_submissions(app: Client):
                     if new_submissions:
                         for sub in sorted(new_submissions, key=lambda x: int(x["timestamp"])):
                             problem_url = f"https://leetcode.com/problems/{sub['titleSlug']}/"
+                            
+                            log_problem_solved(platform="leetcode", problem_id=sub["titleSlug"])
+                            
                             message = (
                                 f"👾 **New Accepted Submission!**\n\n"
                                 f"**Platform:** LeetCode\n"
@@ -283,6 +343,53 @@ async def check_leetcode_submissions(app: Client):
         except Exception as e:
             print(f"An unexpected error occurred in LeetCode check: {e}")
         
+        await asyncio.sleep(60)
+
+
+async def send_daily_summary(app: Client):
+    """Calculates and sends the daily summary."""
+    print("Sending daily summary...")
+    stats = get_daily_stats_from_db()
+    cf_count = stats.get("codeforces", 0)
+    lc_count = stats.get("leetcode", 0)
+    total_count = cf_count + lc_count
+
+    if total_count == 0:
+        message = "No problems solved today. Keep going! 💪"
+    else:
+        message = (
+            f"**📊 Daily Summary**\n\n"
+            f"A great day of progress! Here's your summary:\n\n"
+            f"**Codeforces:** {cf_count} unique problems\n"
+            f"**LeetCode:** {lc_count} unique problems\n"
+            f"**Total:** {total_count} unique problems solved today.\n\n"
+            f"Keep up the great work! ✨"
+        )
+    
+    await app.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True)
+    print("Daily summary sent.")
+
+
+async def schedule_daily_summary(app: Client):
+    """Schedules the daily summary message."""
+    while True:
+        now_utc = datetime.now(pytz.utc)
+        tz = pytz.timezone(config.TIMEZONE)
+        now_local = now_utc.astimezone(tz)
+        
+        # Calculate time until 11:59 PM
+        target_time = now_local.replace(hour=23, minute=59, second=0, microsecond=0)
+        if now_local > target_time:
+            target_time += timedelta(days=1) # Target is tomorrow
+            
+        wait_seconds = (target_time - now_local).total_seconds()
+        print(f"Scheduler: Waiting {wait_seconds / 3600:.2f} hours until next summary.")
+        await asyncio.sleep(wait_seconds)
+        
+        await send_daily_summary(app)
+        
+        # It's a new day, but the DB query handles date filtering, so no reset is needed.
+        # Just need a short sleep to avoid re-sending immediately.
         await asyncio.sleep(60)
 
 
@@ -384,6 +491,26 @@ async def test_leetcode_submission(app: Client):
         print(f"An error occurred during LeetCode test: {e}")
 
 
+def add_fake_yesterday_entry():
+    """Adds a fake LeetCode entry for yesterday to test date filtering."""
+    print("--- Adding fake entry for yesterday's stats to test filtering ---")
+    yesterday_date = (datetime.now(pytz.timezone(config.TIMEZONE)) - timedelta(days=1)).strftime("%Y-%m-%d")
+    platform = "leetcode"
+    problem_id = "3-sum"
+
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT OR IGNORE INTO solved_problems (platform, problem_id, first_solve_date) VALUES (?, ?, ?)",
+                (platform, problem_id, yesterday_date)
+            )
+            conn.commit()
+            print(f"Ensured fake test entry for '{problem_id}' exists for date {yesterday_date}.")
+        except Exception as e:
+            print(f"An error occurred while adding fake entry: {e}")
+
+
 async def main():
     app = Client(
         "cf_notifier_bot",
@@ -392,11 +519,17 @@ async def main():
         bot_token=config.BOT_TOKEN
     )
 
+    init_db()
+
     if config.TEST_MODE:
         print("--- RUNNING IN TEST MODE ---")
         async with app:
-            await test_codeforces_submission(app)
-            await test_leetcode_submission(app)
+            if config.TEST_MODE_STATS_ONLY:
+                add_fake_yesterday_entry()
+                await send_daily_summary(app)
+            else:
+                await test_codeforces_submission(app)
+                await test_leetcode_submission(app)
         print("--- TEST MODE FINISHED ---")
         return  # Exit after testing
 
@@ -424,7 +557,8 @@ async def main():
         print("Bot started! Checking for new submissions on Codeforces and LeetCode...")
         await asyncio.gather(
             check_codeforces_submissions(app),
-            check_leetcode_submissions(app)
+            check_leetcode_submissions(app),
+            schedule_daily_summary(app)
         )
 
 if __name__ == "__main__":
