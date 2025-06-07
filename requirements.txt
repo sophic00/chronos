@@ -1,3 +1,6 @@
 requests
 pyrogram
-TgCrypto 
+TgCrypto
+httpx
+pytz
+python-dotenv 
