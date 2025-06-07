@@ -134,7 +134,6 @@ async def get_latest_leetcode_submission_timestamp():
 
 async def get_leetcode_submission_details(submission_id: int):
     """Fetches details for a specific LeetCode submission."""
-    print(f"\n--- DEBUG: Fetching LeetCode submission details for ID: {submission_id} ---")
     graphql_query = {
         "query": """
             query submissionDetails($submissionId: Int!) {
@@ -151,26 +150,14 @@ async def get_leetcode_submission_details(submission_id: int):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
-            print(f"DEBUG: LeetCode details API response status: {response.status_code}")
             response.raise_for_status()
             data = response.json()
-
             if "errors" in data:
-                print(f"DEBUG: LeetCode API returned errors: {data['errors']}")
+                print(f"LeetCode API error on submission detail fetch: {data['errors']}")
                 return None
-
-            details = data.get("data", {}).get("submissionDetails")
-            if not details:
-                print("DEBUG: 'submissionDetails' key not found or is null in LeetCode response.")
-                print(f"DEBUG: Full LeetCode response JSON: {data}")
-            
-            return details
+            return data.get("data", {}).get("submissionDetails")
         except httpx.RequestError as e:
-            print(f"An HTTP error occurred during LeetCode submission detail fetch: {e}")
-        except Exception as e:
-            print(f"An unexpected error occurred during detail fetch: {e}")
-            if 'response' in locals() and hasattr(response, 'text'):
-                print(f"DEBUG: Raw response content on error: {response.text}")
+            print(f"An error occurred during LeetCode submission detail fetch: {e}")
     return None
 
 
@@ -281,8 +268,9 @@ async def check_leetcode_submissions(app: Client):
                             )
                             
                             details = await get_leetcode_submission_details(int(sub['id']))
-                            if details and details.get('runtime') and details.get('memory'):
-                                message += f"\n**Runtime:** {details['runtime']}\n**Memory:** {details['memory']}"
+                            if details and details.get('runtime') is not None and details.get('memory') is not None:
+                                memory_kb = details['memory'] // 1024
+                                message += f"\n**Runtime:** {details['runtime']} ms\n**Memory:** {memory_kb} KB"
 
                             await app.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True)
                             print(f"Sent LeetCode notification for submission ID {sub['id']}")
@@ -378,16 +366,11 @@ async def test_leetcode_submission(app: Client):
             )
             
             details = await get_leetcode_submission_details(int(sub['id']))
-            if details and details.get('runtime') and details.get('memory'):
-                message += f"\n**Runtime:** {details['runtime']}\n**Memory:** {details['memory']}"
+            if details and details.get('runtime') is not None and details.get('memory') is not None:
+                memory_kb = details['memory'] // 1024
+                message += f"\n**Runtime:** {details['runtime']} ms\n**Memory:** {memory_kb} KB"
             else:
                  message += "\n_(Could not fetch runtime/memory details)_"
-                 print("\n--- DEBUG: Failed to get LeetCode details in test mode. ---")
-                 if details is not None:
-                     print(f"DEBUG: Received 'details' object was: {details}")
-                 else:
-                     print("DEBUG: 'details' object was None.")
-                 print("--- END DEBUG ---\n")
 
             await app.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True)
             print(f"Sent LeetCode test notification for submission ID {sub['id']}")
