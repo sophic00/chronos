@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pyrogram import Client
 
 import config
@@ -21,8 +22,11 @@ from bot import (
 )
 
 async def main():
+    # Ensure the data directory exists
+    os.makedirs("data", exist_ok=True)
+    
     app = Client(
-        "cf_notifier_bot",
+        "data/cf_notifier_bot",
         api_id=config.API_ID,
         api_hash=config.API_HASH,
         bot_token=config.BOT_TOKEN

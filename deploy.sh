@@ -33,7 +33,7 @@ docker run -d \
     --restart always \
     --name "$CONTAINER_NAME" \
     --env-file .env \
-    -v "$(pwd)/data:/app" \
+    -v "$(pwd)/data:/app/data" \
     "$CONTAINER_NAME"
 
 # --- Cleanup ---
