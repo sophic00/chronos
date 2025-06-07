@@ -172,9 +172,7 @@ async def check_codeforces_submissions(app: Client):
                 "apiKey": config.CF_API_KEY,
                 "time": int(time.time()),
             }
-
             api_sig_hash = generate_api_sig(method_name, **params_for_sig)
-
             params = params_for_sig.copy()
             params["apiSig"] = "123456" + api_sig_hash
 
@@ -197,7 +195,8 @@ async def check_codeforces_submissions(app: Client):
                         problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
                         
                         message = (
-                            f"✅ **New Accepted Submission!**\n\n"
+                            f"👾 **New Accepted Submission!**\n\n"
+                            f"**Platform:** Codeforces\n"
                             f"**Problem:** [{problem['name']}]({problem_url})\n"
                             f"**Language:** {submission['programmingLanguage']}\n"
                             f"**Time:** {submission['timeConsumedMillis']} ms\n"
@@ -263,7 +262,9 @@ async def check_leetcode_submissions(app: Client):
                         for sub in sorted(new_submissions, key=lambda x: int(x["timestamp"])):
                             problem_url = f"https://leetcode.com/problems/{sub['titleSlug']}/"
                             message = (
-                                f"**✅ Solved on LeetCode:** [{sub['title']}]({problem_url})\n\n"
+                                f"👾 **New Accepted Submission!**\n\n"
+                                f"**Platform:** LeetCode\n"
+                                f"**Problem:** [{sub['title']}]({problem_url})\n"
                                 f"**Language:** {sub['lang']}"
                             )
                             
@@ -310,7 +311,8 @@ async def test_codeforces_submission(app: Client):
             problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
             verdict = submission.get('verdict', 'N/A')
             message = (
-                f"**[TEST] Latest Codeforces Submission:**\n"
+                f"👾 **[TEST] Latest Submission** 👾\n\n"
+                f"**Platform:** Codeforces\n"
                 f"**Problem:** [{problem['name']}]({problem_url})\n"
                 f"**Verdict:** {verdict}\n"
                 f"**Language:** {submission['programmingLanguage']}\n"
@@ -360,7 +362,8 @@ async def test_leetcode_submission(app: Client):
             sub = submissions[0]
             problem_url = f"https://leetcode.com/problems/{sub['titleSlug']}/"
             message = (
-                f"**[TEST] Latest LeetCode Submission:**\n"
+                f"👾 **[TEST] Latest Submission** 👾\n\n"
+                f"**Platform:** LeetCode\n"
                 f"**Problem:** [{sub['title']}]({problem_url})\n"
                 f"**Language:** {sub['lang']}"
             )
@@ -389,9 +392,6 @@ async def main():
         bot_token=config.BOT_TOKEN
     )
 
-    # # --- TEST MODE ---
-    # # To test, set TEST_MODE = True in config.py and uncomment the following lines.
-    # # It will send one notification for the latest submission on each platform and then exit.
     if config.TEST_MODE:
         print("--- RUNNING IN TEST MODE ---")
         async with app:
@@ -399,7 +399,6 @@ async def main():
             await test_leetcode_submission(app)
         print("--- TEST MODE FINISHED ---")
         return  # Exit after testing
-    # # --- END TEST MODE ---
 
     # Initialize last submission ID on first run for Codeforces
     if not os.path.exists(LAST_SUBMISSION_ID_FILE):
