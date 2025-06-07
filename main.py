@@ -35,6 +35,34 @@ def generate_api_sig(method_name, **kwargs):
     ).hexdigest()
 
 
+def get_latest_submission_id():
+    """Fetches the ID of the most recent submission from Codeforces."""
+    try:
+        method_name = "user.status"
+        params_for_sig = {
+            "handle": config.CF_HANDLE,
+            "from": 1,
+            "count": 1,
+            "apiKey": config.CF_API_KEY,
+            "time": int(time.time()),
+        }
+        api_sig_hash = generate_api_sig(method_name, **params_for_sig)
+        params = params_for_sig.copy()
+        params["apiSig"] = "123456" + api_sig_hash
+
+        response = requests.get(f"{CODEFORCES_API_URL}/{method_name}", params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        if data["status"] == "OK" and data["result"]:
+            return data["result"][0]["id"]
+        elif data["status"] != "OK":
+            print(f"Codeforces API error on init: {data.get('comment')}")
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred during initial submission fetch: {e}")
+    return 0
+
+
 async def check_submissions(app: Client):
     while True:
         try:
@@ -71,8 +99,7 @@ async def check_submissions(app: Client):
                         problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
                         
                         message = (
-                            f"✅ **New Accepted Submission!**\n\n"
-                            f"**Problem:** [{problem['name']}]({problem_url})\n"
+                            f"**👾 Solved on CodeForces:** [{problem['name']}]({problem_url})\n\n"
                             f"**Language:** {submission['programmingLanguage']}\n"
                             f"**Time:** {submission['timeConsumedMillis']} ms\n"
                             f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
@@ -101,6 +128,17 @@ async def main():
         api_hash=config.API_HASH,
         bot_token=config.BOT_TOKEN
     )
+
+    # Initialize last submission ID on first run
+    if not os.path.exists(LAST_SUBMISSION_ID_FILE):
+        print("First run detected. Initializing with the latest submission ID...")
+        latest_id = get_latest_submission_id()
+        if latest_id:
+            save_last_submission_id(latest_id)
+            print(f"Initialized. Will only report submissions newer than ID {latest_id}.")
+        else:
+            print("Could not fetch initial submission ID. Will start from 0.")
+
 
     async with app:
         print("Bot started! Checking for new submissions...")

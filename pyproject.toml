@@ -1,0 +1,11 @@
+[project]
+name = "my-debauch-devotion"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyrogram>=2.0.106",
+    "requests>=2.32.3",
+    "tgcrypto>=1.2.5",
+]
