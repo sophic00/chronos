@@ -16,7 +16,8 @@ from bot import (
     test_codeforces_submission,
     test_leetcode_submission,
     add_fake_yesterday_entry,
-    send_daily_summary
+    send_daily_summary,
+    register_handlers
 )
 
 async def main():
@@ -28,6 +29,7 @@ async def main():
     )
 
     init_db()
+    register_handlers(app)
 
     if config.TEST_MODE:
         print("--- RUNNING IN TEST MODE ---")

@@ -4,7 +4,9 @@ from datetime import datetime, timedelta
 
 import pytz
 import requests
-from pyrogram import Client
+import httpx
+from pyrogram import Client, filters
+from pyrogram.handlers import MessageHandler
 
 import config
 import constants
@@ -154,4 +156,33 @@ def add_fake_yesterday_entry():
             conn.commit()
             print(f"Ensured fake test entry for '{problem_id}' exists for date {yesterday_date}.")
         except Exception as e:
-            print(f"An error occurred while adding fake entry: {e}") 
+            print(f"An error occurred while adding fake entry: {e}")
+
+async def stats_handler(client: Client, message):
+    """Replies with the current daily stats."""
+    stats = get_daily_stats_from_db()
+    cf_count = stats.get("codeforces", 0)
+    lc_count = stats.get("leetcode", 0)
+    total_count = cf_count + lc_count
+
+    if total_count == 0:
+        summary_message = "You haven't solved any new problems yet today. Let's get started! 💪"
+    else:
+        summary_message = (
+            f"**📊 Today's Progress So Far**\n\n"
+            f"Here's your summary for today:\n\n"
+            f"**Codeforces:** {cf_count} unique problems\n"
+            f"**LeetCode:** {lc_count} unique problems\n"
+            f"**Total:** {total_count} unique problems solved today.\n\n"
+        )
+    
+    await message.reply_text(summary_message, disable_web_page_preview=True)
+
+async def ping_handler(client: Client, message):
+    """Replies with a pong message."""
+    await message.reply_text("Pong!")
+
+def register_handlers(app: Client):
+    """Registers all the message handlers for the bot."""
+    app.add_handler(MessageHandler(ping_handler, filters=filters.command("ping") & filters.private))
+    app.add_handler(MessageHandler(stats_handler, filters=filters.command("stats") & filters.private)) 
