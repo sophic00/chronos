@@ -28,15 +28,20 @@ docker build -t "$CONTAINER_NAME" .
 # Create a data directory for persistent storage if it doesn't exist
 mkdir -p data
 
+# Sanitize .env file for Docker by removing quotes and comments.
+# This creates a temporary, clean .env file for Docker to use.
+sed -e "s/'//g" -e 's/"//g' -e 's/[[:space:]]*#.*$//' .env > .env.docker
+
 echo "--- Starting new container ---"
 docker run -d \
     --restart always \
     --name "$CONTAINER_NAME" \
-    --env-file .env \
+    --env-file .env.docker \
     -v "$(pwd)/data:/app/data" \
     "$CONTAINER_NAME"
 
 # --- Cleanup ---
+rm .env.docker
 echo "--- Pruning old Docker images ---"
 docker image prune -f
 

@@ -4,11 +4,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_env_var(var_name, default=None):
-    """Gets an environment variable, stripping inline comments."""
+    """Gets an environment variable, stripping inline comments, quotes, and whitespace."""
     value = os.getenv(var_name, default)
-    if value and '#' in value:
-        value = value.split('#', 1)[0].strip()
-    return value
+    if not value:
+        return default
+    
+    if '#' in value:
+        value = value.split('#', 1)[0]
+    
+    # Strip quotes and then any surrounding whitespace
+    return value.strip().strip("'\"").strip()
 
 # Codeforces
 CF_API_KEY = get_env_var("CF_API_KEY")
