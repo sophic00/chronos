@@ -1,0 +1,22 @@
+name: Deploy to Production Server
+
+on:
+  push:
+    branches:
+      - prod  # Trigger this workflow on pushes to the 'prod' branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }} # Defaults to 22 if not set in secrets
+          script: |
+            # Execute the deployment script on the server
+            bash /home/user/my-debauch-devotion/deploy.sh 
