@@ -1,5 +1,5 @@
 # ---- Base Stage ----
-FROM python:3.11-slim-bookworm as base
+FROM python:3.11-slim-bookworm AS base
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
@@ -10,7 +10,7 @@ WORKDIR /app
 
 
 # ---- Builder Stage ----
-FROM base as builder
+FROM base AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends gcc
@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 
 # ---- Final Stage ----
-FROM base as final
+FROM base AS final
 
 # Copy installed packages from the builder stage
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
