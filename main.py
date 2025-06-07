@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 from pyrogram import Client
 
 import config
@@ -25,6 +26,14 @@ async def main():
     # Ensure the data directory exists
     os.makedirs("data", exist_ok=True)
     
+    session_file = "data/cf_notifier_bot.session"
+
+    # Handle session reset
+    if "--new-session" in sys.argv:
+        print("--- Detected --new-session flag. Removing old session file. ---")
+        if os.path.exists(session_file):
+            os.remove(session_file)
+
     app = Client(
         "data/cf_notifier_bot",
         api_id=config.API_ID,
