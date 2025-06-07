@@ -3,7 +3,7 @@ set -e # Exit immediately if a command exits with a non-zero status.
 
 # --- Configuration ---
 # IMPORTANT: Change this to the absolute path of your project directory on the server.
-PROJECT_DIR="/home/user/my-debauch-devotion"
+PROJECT_DIR="/home/vaibhav/my-debauch-devotion"
 CONTAINER_NAME="submission-notifier"
 
 echo "--- Starting deployment ---"
