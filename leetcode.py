@@ -124,33 +124,37 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
         
         if new_submissions:
             for sub in sorted(new_submissions, key=lambda x: int(x["timestamp"])):
-                problem_url = f"https://leetcode.com/problems/{sub['titleSlug']}/"
-                is_newly_solved = log_problem_solved(platform="leetcode", problem_id=sub["titleSlug"])
+                problem_id = sub["titleSlug"]
+                is_new_unique_solve = log_problem_solved(platform="leetcode", problem_id=problem_id)
                 
-                message = (
-                    f"👾 **New Accepted Submission!**\n\n"
-                    f"**Platform:** LeetCode\n"
-                    f"**Problem:** [{sub['title']}]({problem_url})\n"
-                    f"**Language:** {sub['lang']}"
-                )
-                
-                details = await get_leetcode_submission_details(int(sub['id']))
-                if details and details.get('runtime') is not None and details.get('memory') is not None:
-                    memory_kb = details['memory'] // 1024
-                    message += f"\n**Runtime:** {details['runtime']} ms\n**Memory:** {memory_kb} KB"
+                # Only send a notification for the first time a problem is solved.
+                if is_new_unique_solve:
+                    problem_url = f"https://leetcode.com/problems/{sub['titleSlug']}/"
+                    message = (
+                        f"👾 **New Unique Solve!**\n\n"
+                        f"**Platform:** LeetCode\n"
+                        f"**Problem:** [{sub['title']}]({problem_url})\n"
+                        f"**Language:** {sub['lang']}"
+                    )
+                    
+                    details = await get_leetcode_submission_details(int(sub['id']))
+                    if details and details.get('runtime') is not None and details.get('memory') is not None:
+                        memory_kb = details['memory'] // 1024
+                        message += f"\n**Runtime:** {details['runtime']} ms\n**Memory:** {memory_kb} KB"
 
-                if is_newly_solved:
-                    message += "\n\n*This is a new unique problem solved today!* 🎉"
+                    await context.bot.send_message(
+                        config.CHANNEL_ID, 
+                        message, 
+                        disable_web_page_preview=True,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    logging.info(f"Sent notification for new unique problem: LC submission {sub['id']}")
+                    await asyncio.sleep(1) # Avoid rate-limiting Telegram
+                else:
+                    logging.info(f"Skipping notification for already solved problem: LC submission {sub['id']}")
 
-                await context.bot.send_message(
-                    config.CHANNEL_ID, 
-                    message, 
-                    disable_web_page_preview=True,
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                logging.info(f"Sent LeetCode notification for submission ID {sub['id']}")
+                # ALWAYS update the last processed timestamp to mark this submission as seen.
                 save_last_leetcode_timestamp(int(sub["timestamp"]))
-                await asyncio.sleep(1) # Avoid rate-limiting
                 
     except httpx.RequestError as e:
         logging.error(f"An error occurred with LeetCode API: {e}")

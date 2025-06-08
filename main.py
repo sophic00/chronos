@@ -1,4 +1,3 @@
-import asyncio
 import os
 import sys
 import logging
@@ -24,9 +23,9 @@ from bot import (
     test_leetcode_submission,
     send_daily_summary,
     get_daily_summary_message,
+    error_handler,
 )
 
-# --- Logging Setup ---
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -103,6 +102,7 @@ def main() -> None:
     # --- Database and Command Handlers ---
     init_db()
     register_handlers(application)
+    application.add_error_handler(error_handler)
 
     # --- Initial State Sync (Sync Part) ---
     if get_last_submission_id() == 0:
@@ -131,7 +131,7 @@ def main() -> None:
     )
     job_queue.run_repeating(
         check_leetcode_submissions,
-        interval=300,
+        interval=60,
         first=20,
         name="lc_checker",
     )

@@ -10,6 +10,7 @@ import httpx
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
 from telegram.constants import ParseMode
+from telegram.error import Conflict
 
 import config
 import constants
@@ -167,4 +168,14 @@ async def ping_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def register_handlers(app: Application):
     """Registers all the message handlers for the bot."""
     app.add_handler(CommandHandler("ping", ping_handler, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("stats", stats_handler, filters=filters.ChatType.PRIVATE)) 
+    app.add_handler(CommandHandler("stats", stats_handler, filters=filters.ChatType.PRIVATE))
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Logs the error and provides a specific message for conflict errors."""
+    if isinstance(context.error, Conflict):
+        logging.critical(
+            "Conflict error detected. Another instance of the bot is already running. "
+            "Please stop the other instance before starting a new one."
+        )
+    else:
+        logging.error("Exception while handling an update:", exc_info=context.error) 

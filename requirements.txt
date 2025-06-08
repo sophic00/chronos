@@ -2,4 +2,5 @@ requests
 python-telegram-bot[job-queue]
 httpx
 pytz
-python-dotenv 
+python-dotenv
+psycopg2-binary 

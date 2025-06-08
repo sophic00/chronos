@@ -15,6 +15,9 @@ def get_env_var(var_name, default=None):
     # Strip quotes and then any surrounding whitespace
     return value.strip().strip("'\"").strip()
 
+# Database
+DATABASE_URL = get_env_var("DATABASE_URL")
+
 # Codeforces
 CF_API_KEY = get_env_var("CF_API_KEY")
 CF_API_SECRET = get_env_var("CF_API_SECRET")

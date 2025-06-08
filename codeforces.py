@@ -76,31 +76,36 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
                 # Process them chronologically
                 for submission in sorted(new_successful_submissions, key=lambda x: x['creationTimeSeconds']):
                     problem = submission["problem"]
-                    problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
                     problem_id = f"{problem.get('contestId')}-{problem.get('index')}"
                     
-                    is_newly_solved = log_problem_solved(platform="codeforces", problem_id=problem_id)
+                    is_new_unique_solve = log_problem_solved(platform="codeforces", problem_id=problem_id)
+
+                    # Only send a notification for the first time a problem is solved.
+                    if is_new_unique_solve:
+                        problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
+                        
+                        message = (
+                            f"👾 **New Unique Solve!**\n\n"
+                            f"**Platform:** Codeforces\n"
+                            f"**Problem:** [{problem['name']}]({problem_url})\n"
+                            f"**Language:** {submission['programmingLanguage']}\n"
+                            f"**Time:** {submission['timeConsumedMillis']} ms\n"
+                            f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
+                        )
+                        
+                        await context.bot.send_message(
+                            config.CHANNEL_ID, 
+                            message, 
+                            disable_web_page_preview=True,
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                        logging.info(f"Sent notification for new unique problem: CF submission {submission['id']}")
+                        await asyncio.sleep(1) # Avoid rate-limiting Telegram on new solves
+                    else:
+                        logging.info(f"Skipping notification for already solved problem: CF submission {submission['id']}")
                     
-                    message = (
-                        f"👾 **New Accepted Submission!**\n\n"
-                        f"**Platform:** Codeforces\n"
-                        f"**Problem:** [{problem['name']}]({problem_url})\n"
-                        f"**Language:** {submission['programmingLanguage']}\n"
-                        f"**Time:** {submission['timeConsumedMillis']} ms\n"
-                        f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
-                    )
-                    if is_newly_solved:
-                        message += "\n\n*This is a new unique problem solved today!* 🎉"
-                    
-                    await context.bot.send_message(
-                        config.CHANNEL_ID, 
-                        message, 
-                        disable_web_page_preview=True,
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-                    logging.info(f"Sent notification for CF submission {submission['id']}")
+                    # ALWAYS update the last processed ID to mark this submission as seen.
                     save_last_submission_id(submission["id"])
-                    await asyncio.sleep(1) # Avoid rate-limiting
         else:
             logging.warning(f"Codeforces API returned status: {data.get('comment')}")
     except requests.exceptions.RequestException as e:
