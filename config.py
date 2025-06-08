@@ -26,8 +26,6 @@ LEETCODE_SESSION = get_env_var("LEETCODE_SESSION")
 CSRF_TOKEN = get_env_var("CSRF_TOKEN")
 
 # Telegram
-API_ID = int(get_env_var("API_ID"))
-API_HASH = get_env_var("API_HASH")
 BOT_TOKEN = get_env_var("BOT_TOKEN")
 CHANNEL_ID = int(get_env_var("CHANNEL_ID"))
 TIMEZONE = get_env_var("TIMEZONE", "Asia/Kolkata")

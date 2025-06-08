@@ -2,8 +2,10 @@ import hashlib
 import time
 import requests
 import asyncio
+import logging
 
-from pyrogram import Client
+from telegram.ext import ContextTypes
+from telegram.constants import ParseMode
 
 import config
 import constants
@@ -37,60 +39,71 @@ def get_latest_submission_id():
         if data["status"] == "OK" and data["result"]:
             return data["result"][0]["id"]
         elif data["status"] != "OK":
-            print(f"Codeforces API error on init: {data.get('comment')}")
+            logging.warning(f"Codeforces API error on init: {data.get('comment')}")
     except requests.exceptions.RequestException as e:
-        print(f"An error occurred during initial submission fetch: {e}")
+        logging.error(f"An error occurred during initial submission fetch: {e}")
     return 0
 
-async def check_codeforces_submissions(app: Client):
-    while True:
-        try:
-            method_name = "user.status"
-            params_for_sig = {
-                "handle": config.CF_HANDLE,
-                "from": 1,
-                "count": 10,
-                "apiKey": config.CF_API_KEY,
-                "time": int(time.time()),
-            }
-            api_sig_hash = generate_api_sig(method_name, **params_for_sig)
-            params = params_for_sig.copy()
-            params["apiSig"] = "123456" + api_sig_hash
-            response = requests.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
-            response.raise_for_status()
-            data = response.json()
+async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
+    """Checks for new successful Codeforces submissions and sends notifications."""
+    logging.info("Checking for new Codeforces submissions...")
+    try:
+        method_name = "user.status"
+        params_for_sig = {
+            "handle": config.CF_HANDLE,
+            "from": 1,
+            "count": 10,
+            "apiKey": config.CF_API_KEY,
+            "time": int(time.time()),
+        }
+        api_sig_hash = generate_api_sig(method_name, **params_for_sig)
+        params = params_for_sig.copy()
+        params["apiSig"] = "123456" + api_sig_hash
+        # Note: requests is synchronous. Consider httpx for async version.
+        response = requests.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
+        response.raise_for_status()
+        data = response.json()
 
-            if data["status"] == "OK":
-                last_processed_id = get_last_submission_id()
-                new_successful_submissions = []
+        if data["status"] == "OK":
+            last_processed_id = get_last_submission_id()
+            new_successful_submissions = []
+            if "result" in data:
                 for submission in data["result"]:
                     if submission["id"] > last_processed_id and submission.get("verdict") == "OK":
                         new_successful_submissions.append(submission)
 
-                if new_successful_submissions:
-                    for submission in sorted(new_successful_submissions, key=lambda x: x['creationTimeSeconds']):
-                        problem = submission["problem"]
-                        problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
-                        problem_id = f"{problem.get('contestId')}-{problem.get('index')}"
-                        log_problem_solved(platform="codeforces", problem_id=problem_id)
-                        
-                        message = (
-                            f"👾 **New Accepted Submission!**\n\n"
-                            f"**Platform:** Codeforces\n"
-                            f"**Problem:** [{problem['name']}]({problem_url})\n"
-                            f"**Language:** {submission['programmingLanguage']}\n"
-                            f"**Time:** {submission['timeConsumedMillis']} ms\n"
-                            f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
-                        )
-                        
-                        await app.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True)
-                        print(f"Sent notification for submission {submission['id']}")
-                        save_last_submission_id(submission["id"])
-                        await asyncio.sleep(1)
-            else:
-                print(f"Codeforces API returned status: {data.get('comment')}")
-        except requests.exceptions.RequestException as e:
-            print(f"An error occurred with Codeforces API: {e}")
-        except Exception as e:
-            print(f"An unexpected error occurred in Codeforces check: {e}")
-        await asyncio.sleep(60)
+            if new_successful_submissions:
+                # Process them chronologically
+                for submission in sorted(new_successful_submissions, key=lambda x: x['creationTimeSeconds']):
+                    problem = submission["problem"]
+                    problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
+                    problem_id = f"{problem.get('contestId')}-{problem.get('index')}"
+                    
+                    is_newly_solved = log_problem_solved(platform="codeforces", problem_id=problem_id)
+                    
+                    message = (
+                        f"👾 **New Accepted Submission!**\n\n"
+                        f"**Platform:** Codeforces\n"
+                        f"**Problem:** [{problem['name']}]({problem_url})\n"
+                        f"**Language:** {submission['programmingLanguage']}\n"
+                        f"**Time:** {submission['timeConsumedMillis']} ms\n"
+                        f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
+                    )
+                    if is_newly_solved:
+                        message += "\n\n*This is a new unique problem solved today!* 🎉"
+                    
+                    await context.bot.send_message(
+                        config.CHANNEL_ID, 
+                        message, 
+                        disable_web_page_preview=True,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    logging.info(f"Sent notification for CF submission {submission['id']}")
+                    save_last_submission_id(submission["id"])
+                    await asyncio.sleep(1) # Avoid rate-limiting
+        else:
+            logging.warning(f"Codeforces API returned status: {data.get('comment')}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"An error occurred with Codeforces API: {e}")
+    except Exception as e:
+        logging.error(f"An unexpected error occurred in Codeforces check: {e}", exc_info=True)

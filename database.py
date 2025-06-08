@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import datetime
 import pytz
+import logging
 import config
 import constants
 
@@ -24,8 +25,11 @@ def init_db():
         """)
         conn.commit()
 
-def log_problem_solved(platform: str, problem_id: str):
-    """Logs a newly solved problem, ignoring duplicates across all time."""
+def log_problem_solved(platform: str, problem_id: str) -> bool:
+    """
+    Logs a newly solved problem if it's the first time ever for this user.
+    Returns True if it's a new unique solve (first time ever), False otherwise.
+    """
     solve_date = datetime.now(pytz.timezone(config.TIMEZONE)).strftime("%Y-%m-%d")
     with sqlite3.connect(constants.DB_FILE) as conn:
         cursor = conn.cursor()
@@ -35,9 +39,11 @@ def log_problem_solved(platform: str, problem_id: str):
                 (platform, problem_id, solve_date)
             )
             conn.commit()
-            print(f"Logged new ALL-TIME unique solve: {platform} - {problem_id}")
+            logging.info(f"Logged new ALL-TIME unique solve: {platform} - {problem_id}")
+            return True
         except sqlite3.IntegrityError:
-            pass
+            # This problem_id for this platform has been solved before.
+            return False
 
 def get_daily_stats_from_db():
     """Gets the count of unique problems first solved today from the database."""
