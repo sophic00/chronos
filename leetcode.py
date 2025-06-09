@@ -82,6 +82,32 @@ async def get_leetcode_submission_details(submission_id: int):
             logging.error(f"An error occurred during LeetCode submission detail fetch: {e}")
     return None
 
+async def get_leetcode_problem_difficulty(title_slug: str):
+    graphql_query = {
+        "query": """
+            query questionData($titleSlug: String!) {
+                question(titleSlug: $titleSlug) {
+                    difficulty
+                }
+            }
+        """,
+        "variables": {"titleSlug": title_slug},
+    }
+    cookies = get_leetcode_cookies()
+    headers = get_leetcode_headers()
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            if "errors" in data:
+                logging.error(f"LeetCode API error on problem difficulty fetch: {data['errors']}")
+                return None
+            return data.get("data", {}).get("question", {}).get("difficulty")
+        except httpx.RequestError as e:
+            logging.error(f"An error occurred during LeetCode problem difficulty fetch: {e}")
+    return None
+
 async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
     """Checks for new successful LeetCode submissions and sends notifications."""
     logging.info("Checking for new LeetCode submissions...")
@@ -130,12 +156,18 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                 # Only send a notification for the first time a problem is solved.
                 if is_new_unique_solve:
                     problem_url = f"https://leetcode.com/problems/{sub['titleSlug']}/"
+                    difficulty = await get_leetcode_problem_difficulty(sub['titleSlug'])
+                    
                     message = (
                         f"👾 **New Unique Solve!**\n\n"
                         f"**Platform:** LeetCode\n"
                         f"**Problem:** [{sub['title']}]({problem_url})\n"
-                        f"**Language:** {sub['lang']}"
                     )
+                    
+                    if difficulty:
+                        message += f"**Difficulty:** {difficulty}\n"
+
+                    message += f"**Language:** {sub['lang']}"
                     
                     details = await get_leetcode_submission_details(int(sub['id']))
                     if details and details.get('runtime') is not None and details.get('memory') is not None:

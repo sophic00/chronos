@@ -84,10 +84,13 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
                     if is_new_unique_solve:
                         problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
                         
+                        rating = problem.get('rating', 'NA')
+
                         message = (
                             f"👾 **New Unique Solve!**\n\n"
                             f"**Platform:** Codeforces\n"
                             f"**Problem:** [{problem['name']}]({problem_url})\n"
+                            f"**Rating:** {rating}\n"
                             f"**Language:** {submission['programmingLanguage']}\n"
                             f"**Time:** {submission['timeConsumedMillis']} ms\n"
                             f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
