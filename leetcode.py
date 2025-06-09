@@ -9,6 +9,7 @@ import config
 import constants
 from database import log_problem_solved
 from state_manager import get_last_leetcode_timestamp, save_last_leetcode_timestamp
+from messaging import format_new_solve_message
 
 def get_leetcode_headers():
     return {
@@ -162,21 +163,22 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                 if is_new_unique_solve:
                     problem_url = f"https://leetcode.com/problems/{sub['titleSlug']}/"
                     
-                    message = (
-                        f"👾 **New Unique Solve!**\n\n"
-                        f"**Platform:** LeetCode\n"
-                        f"**Problem:** [{sub['title']}]({problem_url})\n"
-                    )
-                    
-                    if difficulty:
-                        message += f"**Difficulty:** {difficulty}\n"
-
-                    message += f"**Language:** {sub['lang']}"
-                    
                     details = await get_leetcode_submission_details(int(sub['id']))
+                    
+                    runtime = memory = None
                     if details and details.get('runtime') is not None and details.get('memory') is not None:
-                        memory_kb = details['memory'] // 1024
-                        message += f"\n**Runtime:** {details['runtime']} ms\n**Memory:** {memory_kb} KB"
+                        runtime = f"{details['runtime']} ms"
+                        memory = f"{details['memory'] // 1024} KB"
+
+                    message = format_new_solve_message(
+                        platform="LeetCode",
+                        problem_name=sub['title'],
+                        problem_url=problem_url,
+                        difficulty=difficulty,
+                        language=sub['lang'],
+                        runtime=runtime,
+                        memory=memory
+                    )
 
                     await context.bot.send_message(
                         config.CHANNEL_ID, 

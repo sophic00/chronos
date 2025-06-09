@@ -11,6 +11,7 @@ import config
 import constants
 from database import log_problem_solved
 from state_manager import get_last_submission_id, save_last_submission_id
+from messaging import format_new_solve_message
 
 def generate_api_sig(method_name, **kwargs):
     rand = "123456"
@@ -89,14 +90,14 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
                     if is_new_unique_solve:
                         problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
                         
-                        message = (
-                            f"👾 **New Unique Solve!**\n\n"
-                            f"**Platform:** Codeforces\n"
-                            f"**Problem:** [{problem['name']}]({problem_url})\n"
-                            f"**Rating:** {rating}\n"
-                            f"**Language:** {submission['programmingLanguage']}\n"
-                            f"**Time:** {submission['timeConsumedMillis']} ms\n"
-                            f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
+                        message = format_new_solve_message(
+                            platform="Codeforces",
+                            problem_name=problem['name'],
+                            problem_url=problem_url,
+                            difficulty=str(rating),
+                            language=submission['programmingLanguage'],
+                            runtime=f"{submission['timeConsumedMillis']} ms",
+                            memory=f"{submission['memoryConsumedBytes'] // 1024} KB"
                         )
                         
                         await context.bot.send_message(
