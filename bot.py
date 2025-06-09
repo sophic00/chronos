@@ -19,41 +19,48 @@ from codeforces import get_latest_submission_id, generate_api_sig
 from leetcode import get_latest_leetcode_submission_timestamp, get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
 
 def _format_platform_stats(platform_name: str, stats: dict) -> str:
-    """Formats the stats string for a single platform."""
-    if not stats:
-        return f"**{platform_name}:** 0 unique problems\n"
-
+    """Formats the stats string for a single platform. Assumes stats is not empty."""
+    platform_icon = "💻" if platform_name == "LeetCode" else "⚔️"
     total = sum(stats.values())
     
-    # Sort ratings: numerical for CF, predefined for LC
+    # Sort ratings
     if platform_name == "LeetCode":
-        rating_order = {"Easy": 0, "Medium": 1, "Hard": 2}
-        sorted_ratings = sorted(stats.keys(), key=lambda r: rating_order.get(r, 99))
-    else: # Codeforces
-        sorted_ratings = sorted(stats.keys(), key=lambda r: int(r) if r.isdigit() else 9999)
+        rating_order = {"Easy": 0, "Medium": 1, "Hard": 2, "None": 98, 'NA': 99}
+        sorted_ratings = sorted(stats.keys(), key=lambda r: rating_order.get(str(r), 99))
+    else:  # Codeforces
+        sorted_ratings = sorted(stats.keys(), key=lambda r: int(r) if str(r).isdigit() else 9999)
 
-    details = [f"{rating}: {stats[rating]}" for rating in sorted_ratings]
-    return f"**{platform_name}:** {total} unique problems ({', '.join(details)})\n"
+    details_list = [f"`  - {rating if rating else 'N/A'}: {stats[rating]}" for rating in sorted_ratings]
+    details = "\n".join(details_list)
+    
+    return f"**{platform_icon} {platform_name}**\n{details}\n`  -----------------`\n`  Total: {total}`"
 
 
 def get_daily_summary_message() -> str:
     """Generates the daily summary message content."""
     stats = get_daily_stats_from_db()
-    
     total_count = sum(sum(p.values()) for p in stats.values())
 
     if total_count == 0:
         return "yet another uneventful day."
-    else:
-        cf_stats = _format_platform_stats("Codeforces", stats.get("codeforces", {}))
-        lc_stats = _format_platform_stats("LeetCode", stats.get("leetcode", {}))
-        return (
-            f"**📊 Daily Summary**\n\n"
-            f"yet another slightly eventful day:\n\n"
-            f"{cf_stats}"
-            f"{lc_stats}"
-            f"**Total:** {total_count} unique problems solved today.\n\n"
-        )
+    
+    lc_stats = stats.get("leetcode", {})
+    cf_stats = stats.get("codeforces", {})
+
+    summaries = []
+    if lc_stats:
+        summaries.append(_format_platform_stats("LeetCode", lc_stats))
+    if cf_stats:
+        summaries.append(_format_platform_stats("Codeforces", cf_stats))
+    
+    summary_details = "\n\n".join(summaries)
+
+    return (
+        f"**📊 Daily Summary**\n\n"
+        f"yet another slightly eventful day:\n\n"
+        f"{summary_details}\n\n"
+        f"**✨ Grand Total: {total_count} problems**\n"
+    )
 
 async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
     """Sends the daily summary message to the channel."""
@@ -167,16 +174,26 @@ async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if total_count == 0:
         summary_message = "You haven't solved any new problems yet today. Let's get started! 💪"
-    else:
-        cf_stats = _format_platform_stats("Codeforces", stats.get("codeforces", {}))
-        lc_stats = _format_platform_stats("LeetCode", stats.get("leetcode", {}))
-        summary_message = (
-            f"**📊 Today's Progress So Far**\n\n"
-            f"Here's your summary for today:\n\n"
-            f"{cf_stats}"
-            f"{lc_stats}"
-            f"**Total:** {total_count} unique problems solved today.\n\n"
-        )
+        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    lc_stats = stats.get("leetcode", {})
+    cf_stats = stats.get("codeforces", {})
+    
+    summaries = []
+    if lc_stats:
+        summaries.append(_format_platform_stats("LeetCode", lc_stats))
+    if cf_stats:
+        summaries.append(_format_platform_stats("Codeforces", cf_stats))
+
+    summary_details = "\n\n".join(summaries)
+
+    summary_message = (
+        f"**📊 Today's Progress So Far**\n\n"
+        f"Here's your summary for today:\n\n"
+        f"{summary_details}\n\n"
+        f"**✨ Grand Total: {total_count} problems**"
+    )
     
     await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
 
