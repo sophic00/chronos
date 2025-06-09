@@ -24,10 +24,21 @@ def _format_summary_message(stats: dict) -> tuple[str, int]:
     cf_stats = stats.get("codeforces", {})
     
     # LeetCode stats
-    lc_easy = lc_stats.get("Easy", 0)
-    lc_medium = lc_stats.get("Medium", 0)
-    lc_hard = lc_stats.get("Hard", 0)
-    lc_na = lc_stats.get("None", 0) + lc_stats.get("NA", 0)
+    lc_easy = 0
+    lc_medium = 0
+    lc_hard = 0
+    lc_na = 0
+
+    for difficulty, count in lc_stats.items():
+        if difficulty == "Easy":
+            lc_easy += count
+        elif difficulty == "Medium":
+            lc_medium += count
+        elif difficulty == "Hard":
+            lc_hard += count
+        else:
+            lc_na += count
+    
     lc_total = sum(lc_stats.values())
 
     # Codeforces stats aggregation
