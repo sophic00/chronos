@@ -18,21 +18,40 @@ from database import get_daily_stats_from_db
 from codeforces import get_latest_submission_id, generate_api_sig
 from leetcode import get_latest_leetcode_submission_timestamp, get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
 
+def _format_platform_stats(platform_name: str, stats: dict) -> str:
+    """Formats the stats string for a single platform."""
+    if not stats:
+        return f"**{platform_name}:** 0 unique problems\n"
+
+    total = sum(stats.values())
+    
+    # Sort ratings: numerical for CF, predefined for LC
+    if platform_name == "LeetCode":
+        rating_order = {"Easy": 0, "Medium": 1, "Hard": 2}
+        sorted_ratings = sorted(stats.keys(), key=lambda r: rating_order.get(r, 99))
+    else: # Codeforces
+        sorted_ratings = sorted(stats.keys(), key=lambda r: int(r) if r.isdigit() else 9999)
+
+    details = [f"{rating}: {stats[rating]}" for rating in sorted_ratings]
+    return f"**{platform_name}:** {total} unique problems ({', '.join(details)})\n"
+
+
 def get_daily_summary_message() -> str:
     """Generates the daily summary message content."""
     stats = get_daily_stats_from_db()
-    cf_count = stats.get("codeforces", 0)
-    lc_count = stats.get("leetcode", 0)
-    total_count = cf_count + lc_count
+    
+    total_count = sum(sum(p.values()) for p in stats.values())
 
     if total_count == 0:
         return "yet another uneventful day."
     else:
+        cf_stats = _format_platform_stats("Codeforces", stats.get("codeforces", {}))
+        lc_stats = _format_platform_stats("LeetCode", stats.get("leetcode", {}))
         return (
             f"**📊 Daily Summary**\n\n"
             f"yet another slightly eventful day:\n\n"
-            f"**Codeforces:** {cf_count} unique problems\n"
-            f"**LeetCode:** {lc_count} unique problems\n"
+            f"{cf_stats}"
+            f"{lc_stats}"
             f"**Total:** {total_count} unique problems solved today.\n\n"
         )
 
@@ -144,18 +163,18 @@ async def test_leetcode_submission(app: Application):
 async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with the current daily stats."""
     stats = get_daily_stats_from_db()
-    cf_count = stats.get("codeforces", 0)
-    lc_count = stats.get("leetcode", 0)
-    total_count = cf_count + lc_count
+    total_count = sum(sum(p.values()) for p in stats.values())
 
     if total_count == 0:
         summary_message = "You haven't solved any new problems yet today. Let's get started! 💪"
     else:
+        cf_stats = _format_platform_stats("Codeforces", stats.get("codeforces", {}))
+        lc_stats = _format_platform_stats("LeetCode", stats.get("leetcode", {}))
         summary_message = (
             f"**📊 Today's Progress So Far**\n\n"
             f"Here's your summary for today:\n\n"
-            f"**Codeforces:** {cf_count} unique problems\n"
-            f"**LeetCode:** {lc_count} unique problems\n"
+            f"{cf_stats}"
+            f"{lc_stats}"
             f"**Total:** {total_count} unique problems solved today.\n\n"
         )
     

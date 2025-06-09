@@ -77,15 +77,18 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
                 for submission in sorted(new_successful_submissions, key=lambda x: x['creationTimeSeconds']):
                     problem = submission["problem"]
                     problem_id = f"{problem.get('contestId')}-{problem.get('index')}"
-                    
-                    is_new_unique_solve = log_problem_solved(platform="codeforces", problem_id=problem_id)
+                    rating = problem.get('rating', 'NA')
+
+                    is_new_unique_solve = log_problem_solved(
+                        platform="codeforces", 
+                        problem_id=problem_id,
+                        rating=rating
+                    )
 
                     # Only send a notification for the first time a problem is solved.
                     if is_new_unique_solve:
                         problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
                         
-                        rating = problem.get('rating', 'NA')
-
                         message = (
                             f"👾 **New Unique Solve!**\n\n"
                             f"**Platform:** Codeforces\n"

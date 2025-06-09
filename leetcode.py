@@ -151,12 +151,16 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
         if new_submissions:
             for sub in sorted(new_submissions, key=lambda x: int(x["timestamp"])):
                 problem_id = sub["titleSlug"]
-                is_new_unique_solve = log_problem_solved(platform="leetcode", problem_id=problem_id)
+                difficulty = await get_leetcode_problem_difficulty(sub['titleSlug'])
+                is_new_unique_solve = log_problem_solved(
+                    platform="leetcode", 
+                    problem_id=problem_id,
+                    rating=difficulty
+                )
                 
                 # Only send a notification for the first time a problem is solved.
                 if is_new_unique_solve:
                     problem_url = f"https://leetcode.com/problems/{sub['titleSlug']}/"
-                    difficulty = await get_leetcode_problem_difficulty(sub['titleSlug'])
                     
                     message = (
                         f"👾 **New Unique Solve!**\n\n"

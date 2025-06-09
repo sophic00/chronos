@@ -33,9 +33,19 @@ def init_db():
                     platform TEXT,
                     problem_id TEXT,
                     first_solve_date DATE,
+                    rating TEXT,
                     PRIMARY KEY (platform, problem_id)
                 )
             """)
+            
+            # --- Schema Migration ---
+            # This handles migrating old setups by adding the 'rating' column if it's missing.
+            cursor.execute("SELECT 1 FROM information_schema.columns WHERE table_name='solved_problems' AND column_name='rating'")
+            if cursor.fetchone() is None:
+                logging.info("Old database schema detected. Migrating: adding 'rating' column...")
+                cursor.execute("ALTER TABLE solved_problems ADD COLUMN rating TEXT")
+                logging.info("Migration complete. 'rating' column added.")
+
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS key_value_store (
                     key TEXT PRIMARY KEY,
@@ -45,7 +55,7 @@ def init_db():
             conn.commit()
     logging.info("Database initialized successfully.")
 
-def log_problem_solved(platform: str, problem_id: str) -> bool:
+def log_problem_solved(platform: str, problem_id: str, rating: str) -> bool:
     """
     Logs a newly solved problem if it's the first time ever for this user.
     Returns True if it's a new unique solve, False otherwise.
@@ -56,11 +66,11 @@ def log_problem_solved(platform: str, problem_id: str) -> bool:
             try:
                 cursor.execute(
                     """
-                    INSERT INTO solved_problems (platform, problem_id, first_solve_date) 
-                    VALUES (%s, %s, %s)
+                    INSERT INTO solved_problems (platform, problem_id, first_solve_date, rating) 
+                    VALUES (%s, %s, %s, %s)
                     ON CONFLICT (platform, problem_id) DO NOTHING
                     """,
-                    (platform, problem_id, solve_date)
+                    (platform, problem_id, solve_date, str(rating))
                 )
                 conn.commit()
                 # The query returns 1 if a row was inserted, 0 otherwise.
@@ -74,20 +84,29 @@ def log_problem_solved(platform: str, problem_id: str) -> bool:
                 return False
 
 def get_daily_stats_from_db():
-    """Gets the count of unique problems first solved today from the database."""
+    """Gets the count of unique problems first solved today, grouped by platform and rating."""
     solve_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
-    stats = {"codeforces": 0, "leetcode": 0}
+    stats = {}
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             try:
                 cursor.execute(
-                    "SELECT platform, COUNT(problem_id) AS count FROM solved_problems WHERE first_solve_date = %s GROUP BY platform",
+                    """
+                    SELECT platform, rating, COUNT(problem_id) AS count 
+                    FROM solved_problems 
+                    WHERE first_solve_date = %s 
+                    GROUP BY platform, rating
+                    """,
                     (solve_date,)
                 )
                 rows = cursor.fetchall()
                 for row in rows:
-                    if row['platform'] in stats:
-                        stats[row['platform']] = row['count']
+                    platform = row['platform']
+                    rating = row['rating']
+                    count = row['count']
+                    if platform not in stats:
+                        stats[platform] = {}
+                    stats[platform][rating] = count
             except psycopg2.DatabaseError as e:
                 logging.error(f"Error getting daily stats: {e}")
     return stats
