@@ -28,9 +28,9 @@ def format_new_solve_message(
     message = (
         f"👾 *New Solve*\n\n"
         f"⚔️ *Platform:* {platform}\n"
-        f"📄 *Problem:* [{problem_name}]({problem_url})\n"
+        f"📘 *Problem:* [{problem_name}]({problem_url})\n"
         f"🏷️ *Difficulty:* {difficulty_str}\n"
-        f"🛠️ *Language:* {language}\n"
+        f"💻 *Language:* {language}\n"
     )
 
     if runtime:
