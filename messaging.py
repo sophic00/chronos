@@ -11,26 +11,23 @@ def format_new_solve_message(
 ) -> str:
     """Formats the notification message for a new unique solve."""
     
-    # Platform-specific icon
-    platform_icon = "💻" if platform.lower() == "leetcode" else "⚔️"
-    
     # Difficulty/Rating with icon
     if platform.lower() == "leetcode":
         if difficulty == "Easy":
-            difficulty_str = f"🟢 {difficulty}"
+            difficulty_str = f"{difficulty}"
         elif difficulty == "Medium":
-            difficulty_str = f"🟡 {difficulty}"
+            difficulty_str = f"{difficulty}"
         elif difficulty == "Hard":
-            difficulty_str = f"🔴 {difficulty}"
+            difficulty_str = f"{difficulty}"
         else:
-            difficulty_str = f"❓ {difficulty or 'N/A'}"
+            difficulty_str = f"{difficulty or 'N/A'}"
     else: # Codeforces
-        difficulty_str = f"⭐ {difficulty or 'N/A'}"
+        difficulty_str = f"{difficulty or 'N/A'}"
 
     # Build the message
     message = (
         f"📌 *New Solve*\n\n"
-        f"🔹 *Platform:* {platform_icon} {platform}\n"
+        f"⚔️ *Platform:* {platform}\n"
         f"📄 *Problem:* [{problem_name}]({problem_url})\n"
         f"🏷️ *Difficulty:* {difficulty_str}\n"
         f"🛠️ *Language:* {language}\n"
