@@ -26,7 +26,7 @@ def format_new_solve_message(
 
     # Build the message
     message = (
-        f"📌 *New Solve*\n\n"
+        f"👾 *New Solve*\n\n"
         f"⚔️ *Platform:* {platform}\n"
         f"📄 *Problem:* [{problem_name}]({problem_url})\n"
         f"🏷️ *Difficulty:* {difficulty_str}\n"
