@@ -72,10 +72,10 @@ def _format_summary_message(stats: dict) -> tuple[str, int]:
     if lc_total > 0:
         lc_summary = (
             f"💻 *LeetCode Summary*\n"
-            f"• 🟢 *Easy:* {lc_easy}\n"
-            f"• 🟡 *Medium:* {lc_medium}\n"
-            f"• 🔴 *Hard:* {lc_hard}\n"
-            f"• ❓ *Other/Unrated:* {lc_na}\n"
+            f"↦ 🟢 *Easy:* {lc_easy}\n"
+            f"↦ 🟡 *Medium:* {lc_medium}\n"
+            f"↦ 🔴 *Hard:* {lc_hard}\n"
+            f"↦ ❓ *Other/Unrated:* {lc_na}\n"
             f"✅ *Total LeetCode:* {lc_total} problems"
         )
         message_parts.append(lc_summary)
@@ -83,11 +83,11 @@ def _format_summary_message(stats: dict) -> tuple[str, int]:
     if cf_total > 0:
         cf_summary = (
             f"⚔️ *Codeforces Summary*\n"
-            f"• 🥉 *800–1000:* {cf_800_1000}\n"
-            f"• 🥈 *1100–1300:* {cf_1100_1300}\n"
-            f"• 🥇 *1400–1600:* {cf_1400_1600}\n"
-            f"• 🏆 *1700+:* {cf_1700_plus}\n"
-            f"• ❓ *Unrated/Other:* {cf_na}\n"
+            f"↦ 🥉 *800–1000:* {cf_800_1000}\n"
+            f"↦ 🥈 *1100–1300:* {cf_1100_1300}\n"
+            f"↦ 🥇 *1400–1600:* {cf_1400_1600}\n"
+            f"↦ 🏆 *1700+:* {cf_1700_plus}\n"
+            f"↦ ❓ *Unrated/Other:* {cf_na}\n"
             f"✅ *Total Codeforces:* {cf_total} problems"
         )
         message_parts.append(cf_summary)
