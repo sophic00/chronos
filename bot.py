@@ -76,7 +76,6 @@ def _format_summary_message(stats: dict) -> tuple[str, int]:
             f"• 🟡 *Medium:* {lc_medium}\n"
             f"• 🔴 *Hard:* {lc_hard}\n"
             f"• ❓ *Other/Unrated:* {lc_na}\n"
-            f"━━━━━━━━━━━━━━━\n"
             f"✅ *Total LeetCode:* {lc_total} problems"
         )
         message_parts.append(lc_summary)
@@ -89,7 +88,6 @@ def _format_summary_message(stats: dict) -> tuple[str, int]:
             f"• 🥇 *1400–1600:* {cf_1400_1600}\n"
             f"• 🏆 *1700+:* {cf_1700_plus}\n"
             f"• ❓ *Unrated/Other:* {cf_na}\n"
-            f"━━━━━━━━━━━━━━━\n"
             f"✅ *Total Codeforces:* {cf_total} problems"
         )
         message_parts.append(cf_summary)
