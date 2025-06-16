@@ -111,6 +111,35 @@ def get_daily_stats_from_db():
                 logging.error(f"Error getting daily stats: {e}")
     return stats
 
+def get_monthly_stats_from_db():
+    """Gets the count of unique problems first solved in the current month, grouped by platform and rating."""
+    current_date = datetime.now(pytz.timezone(config.TIMEZONE))
+    first_day_of_month = current_date.replace(day=1).date()
+    stats = {}
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            try:
+                cursor.execute(
+                    """
+                    SELECT platform, rating, COUNT(problem_id) AS count 
+                    FROM solved_problems 
+                    WHERE first_solve_date >= %s 
+                    GROUP BY platform, rating
+                    """,
+                    (first_day_of_month,)
+                )
+                rows = cursor.fetchall()
+                for row in rows:
+                    platform = row['platform']
+                    rating = row['rating']
+                    count = row['count']
+                    if platform not in stats:
+                        stats[platform] = {}
+                    stats[platform][rating] = count
+            except psycopg2.DatabaseError as e:
+                logging.error(f"Error getting monthly stats: {e}")
+    return stats
+
 def get_value(key: str, default: str = None) -> str:
     """Gets a value from the key-value store."""
     with get_db_connection() as conn:

@@ -14,7 +14,7 @@ from telegram.error import Conflict
 
 import config
 import constants
-from database import get_daily_stats_from_db
+from database import get_daily_stats_from_db, get_monthly_stats_from_db
 from codeforces import get_latest_submission_id, generate_api_sig
 from leetcode import get_latest_leetcode_submission_timestamp, get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
 
@@ -245,6 +245,31 @@ async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
 
+async def monthly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Replies with the current monthly stats."""
+    stats = get_monthly_stats_from_db()
+    summary_details, grand_total = _format_summary_message(stats)
+
+    if grand_total == 0:
+        summary_message = "You haven't solved any new problems this month yet. Let's get started! 💪"
+        await update.message.reply_text(summary_message, disable_web_page_preview=True)
+        return
+
+    current_date = datetime.now()
+    month_year = current_date.strftime("%B %Y")
+
+    summary_message = (
+        f"📊 *Monthly Progress Report*\n"
+        f"🗓️ *Period:* {month_year}\n"
+        f"🚀 *Progress Overview*\n\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"{summary_details}\n\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"🎯 *Grand Total Solved This Month:* {grand_total}"
+    )
+    
+    await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+
 async def ping_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with a pong message."""
     await update.message.reply_text("Pong!")
@@ -253,6 +278,7 @@ def register_handlers(app: Application):
     """Registers all the message handlers for the bot."""
     app.add_handler(CommandHandler("ping", ping_handler, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("stats", stats_handler, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("mstats", monthly_stats_handler, filters=filters.ChatType.PRIVATE))
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Logs the error and provides a specific message for conflict errors."""
