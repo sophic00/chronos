@@ -4,11 +4,11 @@ import logging
 from datetime import time, datetime, timedelta
 
 import pytz
-from telegram.ext import Application
+from telegram.ext import Application, ContextTypes
 from telegram.constants import ParseMode
 
 import config
-from database import init_db
+from database import init_db, get_monthly_stats_from_db
 from state_manager import (
     get_last_submission_id,
     save_last_submission_id,
