@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from datetime import time
+from datetime import time, datetime, timedelta
 
 import pytz
 from telegram.ext import Application
@@ -24,6 +24,7 @@ from bot import (
     send_daily_summary,
     get_daily_summary_message,
     error_handler,
+    monthly_stats_handler,
 )
 
 logging.basicConfig(
@@ -84,6 +85,31 @@ async def post_initialization(application: Application):
             logger.warning("Could not fetch initial LeetCode submission timestamp.")
 
 
+async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE):
+    """Sends the monthly summary message to the channel."""
+    logging.info("Sending monthly summary...")
+    stats = get_monthly_stats_from_db()
+    summary_details, grand_total = _format_summary_message(stats)
+
+    if grand_total == 0:
+        message = "No problems were solved this month. Let's do better next month! 💪"
+    else:
+        current_date = datetime.now()
+        month_year = current_date.strftime("%B %Y")
+        message = (
+            f"📊 *Monthly Progress Report*\n"
+            f"🗓️ *Period:* {month_year}\n"
+            f"🚀 *Progress Overview*\n\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"{summary_details}\n\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"🎯 *Grand Total Solved This Month:* {grand_total}"
+        )
+
+    await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    logging.info("Monthly summary sent.")
+
+
 def main() -> None:
     """Sets up and runs the bot."""
     # --- Initial Setup ---
@@ -118,11 +144,29 @@ def main() -> None:
     job_queue = application.job_queue
     tz = pytz.timezone(config.TIMEZONE)
 
+    # Daily summary at 23:59
     job_queue.run_daily(
         send_daily_summary,
         time=time(hour=23, minute=59, second=0, tzinfo=tz),
         name="daily_summary",
     )
+
+    # Monthly summary at 23:59 on the last day of each month
+    def get_last_day_of_month():
+        today = datetime.now(tz)
+        if today.month == 12:
+            return 31
+        next_month = today.replace(month=today.month + 1, day=1)
+        return (next_month - timedelta(days=1)).day
+
+    job_queue.run_monthly(
+        send_monthly_summary,
+        when=time(hour=23, minute=59, second=0, tzinfo=tz),
+        day=get_last_day_of_month(),
+        name="monthly_summary",
+    )
+
+    # Codeforces and LeetCode checkers
     job_queue.run_repeating(
         check_codeforces_submissions,
         interval=60,
