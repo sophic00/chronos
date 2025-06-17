@@ -7,7 +7,9 @@ def format_new_solve_message(
     difficulty: Optional[str],
     language: str,
     runtime: Optional[str],
-    memory: Optional[str]
+    memory: Optional[str],
+    code: Optional[str] = None,
+    language_ext: Optional[str] = None
 ) -> str:
     """Formats the notification message for a new unique solve."""
     
@@ -37,5 +39,9 @@ def format_new_solve_message(
         message += f"⚡ *Runtime:* {runtime}\n"
     if memory:
         message += f"🧠 *Memory:* {memory}\n"
+
+    # Add the solution code if available
+    if code and language_ext:
+        message += f"\n💡 *Solution:*\n```{language_ext}\n{code}\n```"
         
     return message 

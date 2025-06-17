@@ -109,6 +109,74 @@ async def get_leetcode_problem_difficulty(title_slug: str):
             logging.error(f"An error occurred during LeetCode problem difficulty fetch: {e}")
     return None
 
+async def get_submission_code(submission_id: int) -> str:
+    """Gets the code for a LeetCode submission."""
+    graphql_query = {
+        "query": """
+            query submissionDetails($submissionId: Int!) {
+                submissionDetails(submissionId: $submissionId) {
+                    code
+                }
+            }
+        """,
+        "variables": {
+            "submissionId": submission_id
+        }
+    }
+    cookies = get_leetcode_cookies()
+    headers = get_leetcode_headers()
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            if "errors" in data:
+                logging.error(f"LeetCode API error getting submission code: {data['errors']}")
+                return ""
+            return data.get("data", {}).get("submissionDetails", {}).get("code", "")
+        except httpx.RequestError as e:
+            logging.error(f"Error getting submission code: {e}")
+            return ""
+
+def parse_submission_code(code: str) -> str:
+    """Parses the submission code to extract the relevant part."""
+    if not code:
+        return ""
+    
+    # Check if it's a LeetCode submission with @lc markers
+    start_marker = "// @lc code=start"
+    end_marker = "// @lc code=end"
+    
+    if start_marker in code and end_marker in code:
+        start_idx = code.find(start_marker) + len(start_marker)
+        end_idx = code.find(end_marker)
+        if start_idx != -1 and end_idx != -1:
+            code = code[start_idx:end_idx].strip()
+    
+    # Remove any leading/trailing whitespace and newlines
+    return code.strip()
+
+def get_language_extension(language: str) -> str:
+    """Maps LeetCode language names to file extensions for syntax highlighting."""
+    language_map = {
+        "cpp": "cpp",
+        "java": "java",
+        "python": "python",
+        "python3": "python",
+        "c": "c",
+        "csharp": "cs",
+        "javascript": "javascript",
+        "typescript": "typescript",
+        "ruby": "ruby",
+        "swift": "swift",
+        "go": "go",
+        "rust": "rust",
+        "kotlin": "kotlin",
+        "scala": "scala",
+        "php": "php",
+    }
+    return language_map.get(language.lower(), "text")
+
 async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
     """Checks for new successful LeetCode submissions and sends notifications."""
     logging.info("Checking for new LeetCode submissions...")
@@ -170,6 +238,11 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                         runtime = f"{details['runtime']} ms"
                         memory = f"{details['memory'] // 1024} KB"
 
+                    # Get and parse the submission code
+                    code = await get_submission_code(int(sub['id']))
+                    parsed_code = parse_submission_code(code)
+                    language_ext = get_language_extension(sub['lang'])
+
                     message = format_new_solve_message(
                         platform="LeetCode",
                         problem_name=sub['title'],
@@ -177,7 +250,9 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                         difficulty=difficulty,
                         language=sub['lang'],
                         runtime=runtime,
-                        memory=memory
+                        memory=memory,
+                        code=parsed_code,
+                        language_ext=language_ext
                     )
 
                     await context.bot.send_message(
@@ -190,10 +265,10 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                     await asyncio.sleep(1) # Avoid rate-limiting Telegram
                 else:
                     logging.info(f"Skipping notification for already solved problem: LC submission {sub['id']}")
-
-                # ALWAYS update the last processed timestamp to mark this submission as seen.
-                save_last_leetcode_timestamp(int(sub["timestamp"]))
                 
+                # ALWAYS update the last processed timestamp
+                save_last_leetcode_timestamp(int(sub["timestamp"]))
+
     except httpx.RequestError as e:
         logging.error(f"An error occurred with LeetCode API: {e}")
     except Exception as e:
