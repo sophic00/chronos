@@ -238,10 +238,13 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                         runtime = f"{details['runtime']} ms"
                         memory = f"{details['memory'] // 1024} KB"
 
-                    # Get and parse the submission code
-                    code = await get_submission_code(int(sub['id']))
-                    parsed_code = parse_submission_code(code)
-                    language_ext = get_language_extension(sub['lang'])
+                    # Get and parse the submission code only if enabled
+                    code = None
+                    language_ext = None
+                    if config.SEND_SOLUTION_CODE:
+                        code = await get_submission_code(int(sub['id']))
+                        code = parse_submission_code(code)
+                        language_ext = get_language_extension(sub['lang'])
 
                     message = format_new_solve_message(
                         platform="LeetCode",
@@ -251,7 +254,7 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                         language=sub['lang'],
                         runtime=runtime,
                         memory=memory,
-                        code=parsed_code,
+                        code=code,
                         language_ext=language_ext
                     )
 

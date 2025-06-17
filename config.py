@@ -38,4 +38,6 @@ TIMEZONE = get_env_var("TIMEZONE", "Asia/Kolkata")
 TEST_MODE = get_env_var("TEST_MODE", "False").lower() in ("true", "1", "t")
 # If TEST_MODE is True, set this to True to only test the daily summary.
 TEST_MODE_STATS_ONLY = get_env_var("TEST_MODE_STATS_ONLY", "False").lower() in ("true", "1", "t")
+# Set to True to include solution code in LeetCode notifications
+SEND_SOLUTION_CODE = get_env_var("SEND_SOLUTION_CODE", "False").lower() in ("true", "1", "t")
 # NOTE: LeetCode cookies expire after about 2 weeks. You will need to update them periodically. 
