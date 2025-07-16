@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 from datetime import time, datetime, timedelta
+import calendar
 
 import pytz
 from telegram.ext import Application, ContextTypes
@@ -25,6 +26,7 @@ from bot import (
     get_daily_summary_message,
     error_handler,
     monthly_stats_handler,
+    _format_summary_message,
 )
 
 logging.basicConfig(
@@ -110,6 +112,16 @@ async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE):
     logging.info("Monthly summary sent.")
 
 
+async def daily_check_and_send_monthly_summary(context: ContextTypes.DEFAULT_TYPE):
+    """Checks if today is the last day of the month and sends monthly summary if so."""
+    now = datetime.now(pytz.timezone(config.TIMEZONE))
+    last_day_of_month = calendar.monthrange(now.year, now.month)[1]
+    
+    if now.day == last_day_of_month:
+        logging.info("Today is the last day of the month, sending monthly summary...")
+        await send_monthly_summary(context)
+
+
 def main() -> None:
     """Sets up and runs the bot."""
     # --- Initial Setup ---
@@ -152,17 +164,9 @@ def main() -> None:
     )
 
     # Monthly summary at 23:59 on the last day of each month
-    def get_last_day_of_month():
-        today = datetime.now(tz)
-        if today.month == 12:
-            return 31
-        next_month = today.replace(month=today.month + 1, day=1)
-        return (next_month - timedelta(days=1)).day
-
-    job_queue.run_monthly(
-        send_monthly_summary,
-        when=time(hour=23, minute=59, second=0, tzinfo=tz),
-        day=get_last_day_of_month(),
+    job_queue.run_daily(
+        daily_check_and_send_monthly_summary,
+        time=time(hour=23, minute=59, second=0, tzinfo=tz),
         name="monthly_summary",
     )
 
