@@ -15,8 +15,7 @@ jobs:
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
       - name: Deploy
         run: |
-          tailscale ssh lyla.shrimp-fujita.ts.net
+          tailscale ssh lyla
           bash bash /home/vaibhav/my-debauch-devotion/deploy.sh
