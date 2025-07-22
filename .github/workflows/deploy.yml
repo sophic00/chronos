@@ -18,5 +18,5 @@ jobs:
           tags: tag:ci
       - name: Deploy
         run: |
-          ssh lyla
+          ssh lyla.shrimp-fujita.ts.net
           bash bash /home/vaibhav/my-debauch-devotion/deploy.sh
