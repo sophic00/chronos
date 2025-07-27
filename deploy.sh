@@ -13,9 +13,12 @@ cd "$PROJECT_DIR"
 echo "--- In project directory: $(pwd) ---"
 
 # --- Git Update ---
-echo "--- Pulling latest code from prod branch ---"
+echo "--- Fetching latest code from origin ---"
+git fetch origin
+
+echo "--- Resetting prod branch to match remote ---"
 git checkout prod
-git pull origin prod
+git reset --hard origin/prod
 
 # --- Docker Operations ---
 echo "--- Stopping and removing old container ---"
