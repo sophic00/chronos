@@ -1,10 +1,7 @@
-import asyncio
-import sqlite3
-from datetime import datetime, timedelta, time
+from datetime import datetime
 import logging
 import time as time_module
 
-import pytz
 import requests
 import httpx
 from telegram import Update
@@ -15,8 +12,8 @@ from telegram.error import Conflict
 import config
 import constants
 from database import get_daily_stats_from_db, get_monthly_stats_from_db
-from codeforces import get_latest_submission_id, generate_api_sig
-from leetcode import get_latest_leetcode_submission_timestamp, get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
+from codeforces import generate_api_sig
+from leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
 
 def _format_summary_message(stats: dict) -> tuple[str, int]:
     """Formats the complete summary message from a stats dictionary."""

@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from datetime import time, datetime, timedelta
+from datetime import time, datetime
 import calendar
 
 import pytz
@@ -25,7 +25,6 @@ from bot import (
     send_daily_summary,
     get_daily_summary_message,
     error_handler,
-    monthly_stats_handler,
     _format_summary_message,
 )
 

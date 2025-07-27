@@ -5,7 +5,6 @@ from datetime import datetime
 import pytz
 import logging
 import config
-import constants
 
 @contextmanager
 def get_db_connection():
