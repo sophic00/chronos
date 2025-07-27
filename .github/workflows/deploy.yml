@@ -15,7 +15,12 @@ jobs:
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-      - name: Deploy
+          tags: tag:ci
+      - name: Configure SSH known hosts
         run: |
-          tailscale ssh lyla
-          bash bash /home/vaibhav/my-debauch-devotion/deploy.sh
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+      - name: Run Deployment Script
+        run: |
+          ssh deploy@${{ secrets.REMOTE_HOST }} 'bash /home/vaibhav/my-debauch-devotion/deploy.sh'
