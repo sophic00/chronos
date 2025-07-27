@@ -5,11 +5,11 @@ import logging
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-import config
-import constants
-from database import log_problem_solved
-from state_manager import get_last_leetcode_timestamp, save_last_leetcode_timestamp
-from messaging import format_new_solve_message
+from ..config import settings as config
+from ..config import constants
+from ..data.database import log_problem_solved
+from ..data.state_manager import get_last_leetcode_timestamp, save_last_leetcode_timestamp
+from ..bot.messaging import format_new_solve_message
 
 def get_leetcode_headers():
     return {

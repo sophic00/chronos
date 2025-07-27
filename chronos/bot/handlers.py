@@ -9,11 +9,10 @@ from telegram.ext import Application, CommandHandler, ContextTypes, filters
 from telegram.constants import ParseMode
 from telegram.error import Conflict
 
-import config
-import constants
-from database import get_daily_stats_from_db, get_monthly_stats_from_db
-from codeforces import generate_api_sig
-from leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
+from ..config import settings as config
+from ..config import constants
+from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db
+from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
 
 def _format_summary_message(stats: dict) -> tuple[str, int]:
     """Formats the complete summary message from a stats dictionary."""
@@ -133,6 +132,8 @@ async def test_codeforces_submission(app: Application):
             "apiKey": config.CF_API_KEY,
             "time": int(time_module.time()),
         }
+        # Lazy import to avoid circular dependency
+        from ..integrations.codeforces import generate_api_sig
         api_sig_hash = generate_api_sig(method_name, **params_for_sig)
         params = params_for_sig.copy()
         params["apiSig"] = "123456" + api_sig_hash

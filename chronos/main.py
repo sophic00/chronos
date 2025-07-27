@@ -8,17 +8,17 @@ import pytz
 from telegram.ext import Application, ContextTypes
 from telegram.constants import ParseMode
 
-import config
-from database import init_db, get_monthly_stats_from_db
-from state_manager import (
+from .config import settings as config
+from .data.database import init_db, get_monthly_stats_from_db
+from .data.state_manager import (
     get_last_submission_id,
     save_last_submission_id,
     get_last_leetcode_timestamp,
     save_last_leetcode_timestamp
 )
-from codeforces import get_latest_submission_id, check_codeforces_submissions
-from leetcode import get_latest_leetcode_submission_timestamp, check_leetcode_submissions
-from bot import (
+from .integrations.codeforces import get_latest_submission_id, check_codeforces_submissions
+from .integrations.leetcode import get_latest_leetcode_submission_timestamp, check_leetcode_submissions
+from .bot.handlers import (
     register_handlers,
     test_codeforces_submission,
     test_leetcode_submission,

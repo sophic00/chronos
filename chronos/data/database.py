@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime
 import pytz
 import logging
-import config
+from ..config import settings as config
 
 @contextmanager
 def get_db_connection():

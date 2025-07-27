@@ -31,4 +31,4 @@ COPY --from=builder /usr/local/bin/ /usr/local/bin/
 COPY . .
 
 # The command to run when the container starts
-CMD ["python", "-u", "main.py"] 
+CMD ["python", "-u", "-m", "chronos.main"] 
