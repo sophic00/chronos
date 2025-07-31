@@ -15,7 +15,7 @@ from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, 
 from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
 
 def _format_progress_bar(current: int, target: int) -> str:
-    """Creates a progress bar with the requested style: ▰▰▰▰▰▰▰═══ 70%"""
+    """Creates a progress bar with the requested style: ▰▰▰▰▰▰▰═══ 2/3"""
     if target == 0:
         return "─"  # No target set
     
@@ -32,8 +32,8 @@ def _format_progress_bar(current: int, target: int) -> str:
     # Create progress bar - always exactly 10 characters
     progress_bar = filled * filled_blocks + empty * (10 - filled_blocks)
     
-    # Format: ▰▰▰▰▰▰▰═══ 70%
-    return f"{progress_bar} {percentage:.0f}%"
+    # Format: ▰▰▰▰▰▰▰═══ 2/3
+    return f"{progress_bar} {current}/{target}"
 
 
 def _format_summary_message(stats: dict, target_type: str = None) -> tuple[str, int]:
