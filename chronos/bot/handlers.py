@@ -20,13 +20,16 @@ def _format_progress_bar(current: int, target: int) -> str:
         return "─"  # No target set
     
     percentage = min(100, (current / target) * 100)
-    filled_blocks = int(percentage / 10)  # 10 blocks total
+    # Round to nearest block (10 blocks total, so each block = 10%)
+    filled_blocks = round(percentage / 10)
+    # Ensure we don't exceed 10 blocks
+    filled_blocks = min(10, filled_blocks)
     
     # Progress bar characters as requested
     filled = "▰"
     empty = "═"
     
-    # Create progress bar
+    # Create progress bar - always exactly 10 characters
     progress_bar = filled * filled_blocks + empty * (10 - filled_blocks)
     
     # Format: ▰▰▰▰▰▰▰═══ 70%
