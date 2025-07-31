@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from datetime import time, datetime
+from datetime import time, datetime, timedelta
 import calendar
 
 import pytz
@@ -9,7 +9,7 @@ from telegram.ext import Application, ContextTypes
 from telegram.constants import ParseMode
 
 from .config import settings as config
-from .data.database import init_db, get_monthly_stats_from_db
+from .data.database import init_db, get_monthly_stats_from_db, get_weekly_stats_from_db
 from .data.state_manager import (
     get_last_submission_id,
     save_last_submission_id,
@@ -26,6 +26,7 @@ from .bot.handlers import (
     get_daily_summary_message,
     error_handler,
     _format_summary_message,
+    weekly_stats_handler,
 )
 
 logging.basicConfig(
@@ -111,6 +112,46 @@ async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE):
     logging.info("Monthly summary sent.")
 
 
+async def send_weekly_summary(context: ContextTypes.DEFAULT_TYPE):
+    """Sends the weekly summary message to the channel."""
+    logging.info("Sending weekly summary...")
+    stats = get_weekly_stats_from_db()
+    summary_details, grand_total = _format_summary_message(stats)
+
+    if grand_total == 0:
+        message = "No problems were solved this week. Let's step up next week! 💪"
+    else:
+        current_date = datetime.now()
+        # Calculate week range (Monday to Sunday)
+        days_since_monday = current_date.weekday()
+        start_of_week = current_date - timedelta(days=days_since_monday)
+        end_of_week = start_of_week + timedelta(days=6)
+        week_range = f"{start_of_week.strftime('%b %d')} - {end_of_week.strftime('%b %d, %Y')}"
+        
+        message = (
+            f"📊 *Weekly Progress Report*\n"
+            f"🗓️ *Period:* {week_range}\n"
+            f"🚀 *Progress Overview*\n\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"{summary_details}\n\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"🎯 *Grand Total Solved This Week:* {grand_total}"
+        )
+
+    await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    logging.info("Weekly summary sent.")
+
+
+async def daily_check_and_send_weekly_summary(context: ContextTypes.DEFAULT_TYPE):
+    """Checks if today is Sunday and sends weekly summary if so."""
+    now = datetime.now(pytz.timezone(config.TIMEZONE))
+    
+    # Sunday is 6 in weekday() (Monday=0, Sunday=6)
+    if now.weekday() == 6:
+        logging.info("Today is Sunday, sending weekly summary...")
+        await send_weekly_summary(context)
+
+
 async def daily_check_and_send_monthly_summary(context: ContextTypes.DEFAULT_TYPE):
     """Checks if today is the last day of the month and sends monthly summary if so."""
     now = datetime.now(pytz.timezone(config.TIMEZONE))
@@ -160,6 +201,13 @@ def main() -> None:
         send_daily_summary,
         time=time(hour=23, minute=59, second=0, tzinfo=tz),
         name="daily_summary",
+    )
+
+    # Weekly summary at 23:59 on Sunday
+    job_queue.run_daily(
+        daily_check_and_send_weekly_summary,
+        time=time(hour=23, minute=59, second=0, tzinfo=tz),
+        name="weekly_summary",
     )
 
     # Monthly summary at 23:59 on the last day of each month

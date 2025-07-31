@@ -1,7 +1,7 @@
 import psycopg2
 import psycopg2.extras
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import logging
 from ..config import settings as config
@@ -137,6 +137,37 @@ def get_monthly_stats_from_db():
                     stats[platform][rating] = count
             except psycopg2.DatabaseError as e:
                 logging.error(f"Error getting monthly stats: {e}")
+    return stats
+
+def get_weekly_stats_from_db():
+    """Gets the count of unique problems first solved in the current week (Monday to Sunday), grouped by platform and rating."""
+    current_date = datetime.now(pytz.timezone(config.TIMEZONE))
+    # Calculate the start of the current week (Monday)
+    days_since_monday = current_date.weekday()  # Monday is 0, Sunday is 6
+    start_of_week = (current_date - timedelta(days=days_since_monday)).date()
+    stats = {}
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            try:
+                cursor.execute(
+                    """
+                    SELECT platform, rating, COUNT(problem_id) AS count 
+                    FROM solved_problems 
+                    WHERE first_solve_date >= %s 
+                    GROUP BY platform, rating
+                    """,
+                    (start_of_week,)
+                )
+                rows = cursor.fetchall()
+                for row in rows:
+                    platform = row['platform']
+                    rating = row['rating']
+                    count = row['count']
+                    if platform not in stats:
+                        stats[platform] = {}
+                    stats[platform][rating] = count
+            except psycopg2.DatabaseError as e:
+                logging.error(f"Error getting weekly stats: {e}")
     return stats
 
 def get_value(key: str, default: str = None) -> str:

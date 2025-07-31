@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import time as time_module
 
@@ -11,7 +11,7 @@ from telegram.error import Conflict
 
 from ..config import settings as config
 from ..config import constants
-from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db
+from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db
 from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
 
 def _format_summary_message(stats: dict) -> tuple[str, int]:
@@ -268,6 +268,35 @@ async def monthly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TY
     
     await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
 
+async def weekly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Replies with the current weekly stats."""
+    stats = get_weekly_stats_from_db()
+    summary_details, grand_total = _format_summary_message(stats)
+
+    if grand_total == 0:
+        summary_message = "You haven't solved any new problems this week yet. Let's get started! 💪"
+        await update.message.reply_text(summary_message, disable_web_page_preview=True)
+        return
+
+    current_date = datetime.now()
+    # Calculate week range (Monday to Sunday)
+    days_since_monday = current_date.weekday()
+    start_of_week = current_date - timedelta(days=days_since_monday)
+    end_of_week = start_of_week + timedelta(days=6)
+    week_range = f"{start_of_week.strftime('%b %d')} - {end_of_week.strftime('%b %d, %Y')}"
+
+    summary_message = (
+        f"📊 *Weekly Progress Report*\n"
+        f"🗓️ *Period:* {week_range}\n"
+        f"🚀 *Progress Overview*\n\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"{summary_details}\n\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"🎯 *Grand Total Solved This Week:* {grand_total}"
+    )
+    
+    await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+
 async def ping_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with a pong message."""
     await update.message.reply_text("Pong!")
@@ -277,6 +306,7 @@ def register_handlers(app: Application):
     app.add_handler(CommandHandler("ping", ping_handler, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("stats", stats_handler, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("mstats", monthly_stats_handler, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("wstats", weekly_stats_handler, filters=filters.ChatType.PRIVATE))
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Logs the error and provides a specific message for conflict errors."""
