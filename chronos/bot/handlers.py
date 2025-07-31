@@ -15,20 +15,25 @@ from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, 
 from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
 
 def _format_progress_bar(current: int, target: int) -> str:
-    """Creates a progress bar emoji representation."""
+    """Creates a progress bar with Unicode characters."""
     if target == 0:
-        return "➖"  # No target set
+        return "─"  # No target set
     
     percentage = min(100, (current / target) * 100)
-    filled_blocks = int(percentage / 10)
+    filled_blocks = int(percentage / 8)  # 8 blocks for cleaner look
     
-    # Create progress bar with 10 blocks
-    progress_bar = "🟩" * filled_blocks + "⬜" * (10 - filled_blocks)
+    # Unicode progress bar characters
+    filled = "█"
+    empty = "░"
     
+    # Create progress bar
+    progress_bar = filled * filled_blocks + empty * (8 - filled_blocks)
+    
+    # Add percentage and completion status
     if current >= target:
-        return f"{progress_bar} ✅ {current}/{target}"
+        return f"[{progress_bar}] ✓ {current}/{target} ({percentage:.0f}%)"
     else:
-        return f"{progress_bar} {current}/{target}"
+        return f"[{progress_bar}] {current}/{target} ({percentage:.0f}%)"
 
 
 def _format_summary_message(stats: dict, target_type: str = None) -> tuple[str, int]:
