@@ -51,6 +51,25 @@ def init_db():
                     value TEXT
                 )
             """)
+            
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS leetcode_targets (
+                    id SERIAL PRIMARY KEY,
+                    target_type TEXT NOT NULL CHECK (target_type IN ('daily', 'weekly', 'monthly')),
+                    easy_target INTEGER DEFAULT 0,
+                    medium_target INTEGER DEFAULT 0,
+                    hard_target INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Ensure only one target per type
+            cursor.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS unique_target_type 
+                ON leetcode_targets (target_type)
+            """)
+            
             conn.commit()
     logging.info("Database initialized successfully.")
 
@@ -198,4 +217,64 @@ def set_value(key: str, value: str):
                 conn.commit()
             except psycopg2.DatabaseError as e:
                 logging.error(f"Error setting value for key '{key}': {e}")
-                conn.rollback() 
+                conn.rollback()
+
+
+def set_leetcode_target(target_type: str, easy: int, medium: int, hard: int) -> bool:
+    """Sets LeetCode targets for daily, weekly, or monthly."""
+    if target_type not in ['daily', 'weekly', 'monthly']:
+        raise ValueError("target_type must be 'daily', 'weekly', or 'monthly'")
+    
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO leetcode_targets (target_type, easy_target, medium_target, hard_target, updated_at)
+                    VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (target_type) 
+                    DO UPDATE SET 
+                        easy_target = EXCLUDED.easy_target,
+                        medium_target = EXCLUDED.medium_target,
+                        hard_target = EXCLUDED.hard_target,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (target_type, easy, medium, hard)
+                )
+                conn.commit()
+                logging.info(f"Set {target_type} LeetCode target: Easy={easy}, Medium={medium}, Hard={hard}")
+                return True
+            except psycopg2.DatabaseError as e:
+                logging.error(f"Error setting {target_type} target: {e}")
+                conn.rollback()
+                return False
+
+
+def get_leetcode_target(target_type: str) -> dict:
+    """Gets LeetCode targets for daily, weekly, or monthly."""
+    if target_type not in ['daily', 'weekly', 'monthly']:
+        raise ValueError("target_type must be 'daily', 'weekly', or 'monthly'")
+    
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            try:
+                cursor.execute(
+                    """
+                    SELECT easy_target, medium_target, hard_target 
+                    FROM leetcode_targets 
+                    WHERE target_type = %s
+                    """,
+                    (target_type,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'easy': row['easy_target'],
+                        'medium': row['medium_target'],
+                        'hard': row['hard_target']
+                    }
+                else:
+                    return {'easy': 0, 'medium': 0, 'hard': 0}
+            except psycopg2.DatabaseError as e:
+                logging.error(f"Error getting {target_type} target: {e}")
+                return {'easy': 0, 'medium': 0, 'hard': 0} 

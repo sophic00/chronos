@@ -91,7 +91,7 @@ async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE):
     """Sends the monthly summary message to the channel."""
     logging.info("Sending monthly summary...")
     stats = get_monthly_stats_from_db()
-    summary_details, grand_total = _format_summary_message(stats)
+    summary_details, grand_total = _format_summary_message(stats, 'monthly')
 
     if grand_total == 0:
         message = "No problems were solved this month. Let's do better next month! 💪"
@@ -116,7 +116,7 @@ async def send_weekly_summary(context: ContextTypes.DEFAULT_TYPE):
     """Sends the weekly summary message to the channel."""
     logging.info("Sending weekly summary...")
     stats = get_weekly_stats_from_db()
-    summary_details, grand_total = _format_summary_message(stats)
+    summary_details, grand_total = _format_summary_message(stats, 'weekly')
 
     if grand_total == 0:
         message = "No problems were solved this week. Let's step up next week! 💪"
