@@ -41,7 +41,7 @@ async def get_latest_leetcode_submission_timestamp():
     }
     cookies = get_leetcode_cookies()
     headers = get_leetcode_headers()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
             response.raise_for_status()
@@ -70,7 +70,7 @@ async def get_leetcode_submission_details(submission_id: int):
     }
     cookies = get_leetcode_cookies()
     headers = get_leetcode_headers()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
             response.raise_for_status()
@@ -96,7 +96,7 @@ async def get_leetcode_problem_difficulty(title_slug: str):
     }
     cookies = get_leetcode_cookies()
     headers = get_leetcode_headers()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
             response.raise_for_status()
@@ -125,7 +125,7 @@ async def get_submission_code(submission_id: int) -> str:
     }
     cookies = get_leetcode_cookies()
     headers = get_leetcode_headers()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
             response.raise_for_status()
@@ -200,7 +200,7 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
     cookies = get_leetcode_cookies()
     headers = get_leetcode_headers()
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
             response.raise_for_status()
             data = response.json()
