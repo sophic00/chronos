@@ -1,6 +1,8 @@
-requests
-python-telegram-bot[job-queue]
-httpx
-pytz
-python-dotenv
-psycopg2-binary 
+httpx>=0.28.1
+psycopg2-binary>=2.9.10
+python-dotenv>=1.1.0
+python-telegram-bot[job-queue]>=22.1
+pytz>=2025.2
+requests>=2.32.3
+sqlalchemy>=2.0.0
+alembic>=1.13.0 
