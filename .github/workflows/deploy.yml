@@ -20,7 +20,7 @@ jobs:
       - name: Configure SSH known hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan "${{ secrets.REMOTE_HOST}}" >> ~/.ssh/known_hosts
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" | base64 -d > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
       - name: Run Deployment Script
