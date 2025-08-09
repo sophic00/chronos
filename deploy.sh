@@ -3,22 +3,27 @@ set -e # Exit immediately if a command exits with a non-zero status.
 
 # --- Configuration ---
 # IMPORTANT: Change this to the absolute path of your project directory on the server.
-PROJECT_DIR="/home/vaibhav/my-debauch-devotion"
-CONTAINER_NAME="submission-notifier"
+PROJECT_DIR="/home/vaibhav/chronos"
+CONTAINER_NAME="chronos"
 
 echo "--- Starting deployment ---"
 
-# --- Navigation ---
-cd "$PROJECT_DIR"
+# --- Setup ---
+if [ -d "$PROJECT_DIR" ]; then
+    echo "--- Project directory found. Fetching latest code... ---"
+    cd "$PROJECT_DIR"
+    git fetch origin
+    echo "--- Resetting prod branch to match remote ---"
+    git checkout prod
+    git reset --hard origin/prod
+else
+    echo "--- Project directory not found. Cloning repository... ---"
+    git clone "$GIT_REPO_URL" "$PROJECT_DIR"
+    cd "$PROJECT_DIR"
+    git checkout prod
+fi
+
 echo "--- In project directory: $(pwd) ---"
-
-# --- Git Update ---
-echo "--- Fetching latest code from origin ---"
-git fetch origin
-
-echo "--- Resetting prod branch to match remote ---"
-git checkout prod
-git reset --hard origin/prod
 
 # --- Docker Operations ---
 echo "--- Stopping and removing old container ---"
