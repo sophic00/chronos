@@ -29,6 +29,14 @@ def get_weekly_stats_from_db():
     """Gets the count of unique problems first solved in the current week (Monday to Sunday), grouped by platform and rating."""
     return db_service.get_weekly_stats()
 
+def get_past_day_stats_from_db():
+    """Gets the count of unique problems first solved yesterday, grouped by platform and rating."""
+    return db_service.get_past_day_stats()
+
+def get_past_week_stats_from_db():
+    """Gets the count of unique problems first solved in the previous week (Monday to Sunday), grouped by platform and rating."""
+    return db_service.get_past_week_stats()
+
 def get_value(key: str, default: str = None) -> str:
     """Gets a value from the key-value store."""
     return db_service.get_value(key, default)

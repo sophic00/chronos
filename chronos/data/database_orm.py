@@ -172,6 +172,72 @@ class DatabaseService:
         
         return stats
     
+    def get_past_day_stats(self) -> Dict[str, Dict[str, int]]:
+        """Get the count of unique problems first solved yesterday, grouped by platform and rating."""
+        current_date = datetime.now(pytz.timezone(config.TIMEZONE))
+        yesterday = (current_date - timedelta(days=1)).date()
+        stats = {}
+        
+        with self.get_session() as session:
+            try:
+                results = session.query(
+                    SolvedProblem.platform,
+                    SolvedProblem.rating,
+                    func.count(SolvedProblem.problem_id).label('count')
+                ).filter(
+                    SolvedProblem.first_solve_date == yesterday
+                ).group_by(
+                    SolvedProblem.platform,
+                    SolvedProblem.rating
+                ).all()
+                
+                for platform, rating, count in results:
+                    if platform not in stats:
+                        stats[platform] = {}
+                    stats[platform][rating] = count
+                    
+            except SQLAlchemyError as e:
+                logging.error(f"Error getting past day stats: {e}")
+        
+        return stats
+    
+    def get_past_week_stats(self) -> Dict[str, Dict[str, int]]:
+        """Get the count of unique problems first solved in the previous week (Monday to Sunday), grouped by platform and rating."""
+        current_date = datetime.now(pytz.timezone(config.TIMEZONE))
+        # Calculate the start of the current week (Monday)
+        days_since_monday = current_date.weekday()  # Monday is 0, Sunday is 6
+        start_of_current_week = (current_date - timedelta(days=days_since_monday)).date()
+        # Previous week is 7 days before current week
+        start_of_previous_week = start_of_current_week - timedelta(days=7)
+        end_of_previous_week = start_of_current_week - timedelta(days=1)
+        stats = {}
+        
+        with self.get_session() as session:
+            try:
+                results = session.query(
+                    SolvedProblem.platform,
+                    SolvedProblem.rating,
+                    func.count(SolvedProblem.problem_id).label('count')
+                ).filter(
+                    and_(
+                        SolvedProblem.first_solve_date >= start_of_previous_week,
+                        SolvedProblem.first_solve_date <= end_of_previous_week
+                    )
+                ).group_by(
+                    SolvedProblem.platform,
+                    SolvedProblem.rating
+                ).all()
+                
+                for platform, rating, count in results:
+                    if platform not in stats:
+                        stats[platform] = {}
+                    stats[platform][rating] = count
+                    
+            except SQLAlchemyError as e:
+                logging.error(f"Error getting past week stats: {e}")
+        
+        return stats
+    
     def get_value(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Get a value from the key-value store."""
         with self.get_session() as session:

@@ -11,11 +11,10 @@ from telegram.error import Conflict
 
 from ..config import settings as config
 from ..config import constants
-from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, set_leetcode_target, get_leetcode_target
+from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_past_day_stats_from_db, get_past_week_stats_from_db, set_leetcode_target, get_leetcode_target
 from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
 
 def _format_progress_bar(current: int, target: int) -> str:
-    """Creates a progress bar with the requested style: ▰▰▰▰▰▰▰═══ 2/3"""
     if target == 0:
         return "─"  # No target set
     
@@ -377,6 +376,93 @@ async def weekly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
 
+async def past_day_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Replies with yesterday's stats."""
+    stats = get_past_day_stats_from_db()
+    summary_details, grand_total = _format_summary_message(stats, 'daily')
+
+    if grand_total == 0:
+        # Check if there are daily targets set for reference
+        targets = get_leetcode_target('daily')
+        if targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0:
+            yesterday = datetime.now() - timedelta(days=1)
+            date_str = yesterday.strftime("%B %d, %Y")
+            target_summary = (
+                f"📊 *Yesterday's Progress Report*\n"
+                f"🗓️ *Date:* {date_str}\n"
+                f"🎯 *Daily Targets (for reference):*\n"
+                f"🟢 Easy: {_format_progress_bar(0, targets['easy'])}\n"
+                f"🟡 Medium: {_format_progress_bar(0, targets['medium'])}\n"
+                f"🔴 Hard: {_format_progress_bar(0, targets['hard'])}\n\n"
+                f"You didn't solve any new problems yesterday. 📅"
+            )
+            await update.message.reply_text(target_summary, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+        else:
+            yesterday = datetime.now() - timedelta(days=1)
+            date_str = yesterday.strftime("%B %d, %Y")
+            summary_message = f"You didn't solve any new problems on {date_str}. 📅"
+            await update.message.reply_text(summary_message, disable_web_page_preview=True)
+        return
+
+    yesterday = datetime.now() - timedelta(days=1)
+    date_str = yesterday.strftime("%B %d, %Y")
+
+    summary_message = (
+        f"📊 *Yesterday's Progress Report*\n"
+        f"🗓️ *Date:* {date_str}\n"
+        f"🚀 *Progress Overview*\n\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"{summary_details}\n\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"🎯 *Grand Total Solved Yesterday:* {grand_total}"
+    )
+    
+    await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+
+async def past_week_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Replies with last week's stats."""
+    stats = get_past_week_stats_from_db()
+    summary_details, grand_total = _format_summary_message(stats, 'weekly')
+
+    # Calculate last week's date range (Monday to Sunday)
+    current_date = datetime.now()
+    days_since_monday = current_date.weekday()
+    start_of_current_week = current_date - timedelta(days=days_since_monday)
+    start_of_last_week = start_of_current_week - timedelta(days=7)
+    end_of_last_week = start_of_current_week - timedelta(days=1)
+    week_range = f"{start_of_last_week.strftime('%b %d')} - {end_of_last_week.strftime('%b %d, %Y')}"
+
+    if grand_total == 0:
+        # Check if there are weekly targets set for reference
+        targets = get_leetcode_target('weekly')
+        if targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0:
+            target_summary = (
+                f"📊 *Last Week's Progress Report*\n"
+                f"🗓️ *Period:* {week_range}\n"
+                f"🎯 *Weekly Targets (for reference):*\n"
+                f"🟢 Easy: {_format_progress_bar(0, targets['easy'])}\n"
+                f"🟡 Medium: {_format_progress_bar(0, targets['medium'])}\n"
+                f"🔴 Hard: {_format_progress_bar(0, targets['hard'])}\n\n"
+                f"You didn't solve any new problems last week. 📅"
+            )
+            await update.message.reply_text(target_summary, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+        else:
+            summary_message = f"You didn't solve any new problems last week ({week_range}). 📅"
+            await update.message.reply_text(summary_message, disable_web_page_preview=True)
+        return
+
+    summary_message = (
+        f"📊 *Last Week's Progress Report*\n"
+        f"🗓️ *Period:* {week_range}\n"
+        f"🚀 *Progress Overview*\n\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"{summary_details}\n\n"
+        f"━━━━━━━━━━━━━━━\n\n"
+        f"🎯 *Grand Total Solved Last Week:* {grand_total}"
+    )
+    
+    await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+
 async def ping_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with a pong message."""
     await update.message.reply_text("Pong!")
@@ -549,6 +635,8 @@ def register_handlers(app: Application):
     app.add_handler(CommandHandler("stats", stats_handler, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("mstats", monthly_stats_handler, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("wstats", weekly_stats_handler, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("pstats", past_day_stats_handler, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("pwstats", past_week_stats_handler, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("dset", set_daily_target_handler, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("wset", set_weekly_target_handler, filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("mset", set_monthly_target_handler, filters=filters.ChatType.PRIVATE))
