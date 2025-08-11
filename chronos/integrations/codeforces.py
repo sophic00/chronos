@@ -1,6 +1,6 @@
 import hashlib
 import time
-import requests
+import httpx
 import asyncio
 import logging
 
@@ -34,15 +34,20 @@ def get_latest_submission_id():
         api_sig_hash = generate_api_sig(method_name, **params_for_sig)
         params = params_for_sig.copy()
         params["apiSig"] = "123456" + api_sig_hash
-        response = requests.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
-        response.raise_for_status()
-        data = response.json()
+        with httpx.Client(timeout=30.0) as client:
+            response = client.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
+            response.raise_for_status()
+            data = response.json()
         if data["status"] == "OK" and data["result"]:
             return data["result"][0]["id"]
         elif data["status"] != "OK":
             logging.warning(f"Codeforces API error on init: {data.get('comment')}")
-    except requests.exceptions.RequestException as e:
+    except httpx.RequestError as e:
         logging.error(f"An error occurred during initial submission fetch: {e}")
+    except httpx.HTTPStatusError as e:
+        logging.error(f"Codeforces API returned error status {e.response.status_code} during init: {e}")
+    except httpx.TimeoutException as e:
+        logging.error(f"Codeforces API request timed out during init: {e}")
     return 0
 
 async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
@@ -60,10 +65,11 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
         api_sig_hash = generate_api_sig(method_name, **params_for_sig)
         params = params_for_sig.copy()
         params["apiSig"] = "123456" + api_sig_hash
-        # Note: requests is synchronous. Consider httpx for async version.
-        response = requests.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
-        response.raise_for_status()
-        data = response.json()
+        # Use async httpx to prevent blocking other scheduled jobs
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
+            response.raise_for_status()
+            data = response.json()
 
         if data["status"] == "OK":
             last_processed_id = get_last_submission_id()
@@ -115,7 +121,11 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
                     save_last_submission_id(submission["id"])
         else:
             logging.warning(f"Codeforces API returned status: {data.get('comment')}")
-    except requests.exceptions.RequestException as e:
+    except httpx.RequestError as e:
         logging.error(f"An error occurred with Codeforces API: {e}")
+    except httpx.HTTPStatusError as e:
+        logging.error(f"Codeforces API returned error status {e.response.status_code}: {e}")
+    except httpx.TimeoutException as e:
+        logging.error(f"Codeforces API request timed out: {e}")
     except Exception as e:
         logging.error(f"An unexpected error occurred in Codeforces check: {e}", exc_info=True)
