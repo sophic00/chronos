@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 import logging
 import time as time_module
 
-import requests
 import httpx
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, filters
@@ -174,10 +173,11 @@ async def test_codeforces_submission(app: Application):
         params = params_for_sig.copy()
         params["apiSig"] = "123456" + api_sig_hash
         
-        # Note: requests is synchronous, consider httpx for async
-        response = requests.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
-        response.raise_for_status()
-        data = response.json()
+        # Use async httpx for non-blocking requests
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
+            response.raise_for_status()
+            data = response.json()
 
         if data["status"] == "OK" and data["result"]:
             submission = data["result"][0]
@@ -197,8 +197,14 @@ async def test_codeforces_submission(app: Application):
             logging.info(f"Sent Codeforces test notification for submission {submission['id']}.")
         else:
             logging.warning(f"Could not fetch latest Codeforces submission. Status: {data.get('comment')}")
+    except httpx.RequestError as e:
+        logging.error(f"An error occurred with Codeforces API during test: {e}")
+    except httpx.HTTPStatusError as e:
+        logging.error(f"Codeforces API returned error status {e.response.status_code} during test: {e}")
+    except httpx.TimeoutException as e:
+        logging.error(f"Codeforces API request timed out during test: {e}")
     except Exception as e:
-        logging.error(f"An error occurred during Codeforces test: {e}", exc_info=True)
+        logging.error(f"An unexpected error occurred during Codeforces test: {e}", exc_info=True)
 
 
 async def test_leetcode_submission(app: Application):
