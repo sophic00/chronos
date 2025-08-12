@@ -15,22 +15,18 @@ from ..integrations.leetcode import get_leetcode_submission_details, get_leetcod
 
 def _format_progress_bar(current: int, target: int) -> str:
     if target == 0:
-        return "─"  # No target set
+        # No target set, but show current count if there are attempts
+        return str(current) if current > 0 else "─"
     
     percentage = min(100, (current / target) * 100)
-    # Round to nearest block (10 blocks total, so each block = 10%)
     filled_blocks = round(percentage / 10)
-    # Ensure we don't exceed 10 blocks
     filled_blocks = min(10, filled_blocks)
     
-    # Progress bar characters as requested
     filled = "▰"
     empty = "═"
     
-    # Create progress bar - always exactly 10 characters
     progress_bar = filled * filled_blocks + empty * (10 - filled_blocks)
     
-    # Format: ▰▰▰▰▰▰▰═══ 2/3
     return f"{progress_bar} {current}/{target}"
 
 
