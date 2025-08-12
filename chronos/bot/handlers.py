@@ -27,7 +27,12 @@ def _format_progress_bar(current: int, target: int) -> str:
     
     progress_bar = filled * filled_blocks + empty * (10 - filled_blocks)
     
-    return f"{progress_bar} {current}/{target}"
+    if current >= target:
+        indicator = " ✅"  
+    else:
+        indicator = " ❌" 
+    
+    return f"{progress_bar} {current}/{target}{indicator}"
 
 
 def _format_summary_message(stats: dict, target_type: str = None) -> tuple[str, int]:
@@ -82,11 +87,9 @@ def _format_summary_message(stats: dict, target_type: str = None) -> tuple[str, 
     message_parts = []
     
     if lc_total > 0 or target_type:
-        # Get targets if target_type is specified
         targets = get_leetcode_target(target_type) if target_type else {'easy': 0, 'medium': 0, 'hard': 0}
         
         if target_type and (targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0):
-            # Show progress with targets
             lc_summary = (
                 f"💻 *LeetCode Summary*\n"
                 f"↦ 🟢 *Easy:* {_format_progress_bar(lc_easy, targets['easy'])}\n"
@@ -118,6 +121,36 @@ def _format_summary_message(stats: dict, target_type: str = None) -> tuple[str, 
             f"✅ *Total Codeforces:* {cf_total} problems"
         )
         message_parts.append(cf_summary)
+
+    if target_type and lc_total > 0:
+        targets = get_leetcode_target(target_type)
+        if targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0:
+            targets_met = 0
+            total_targets = 0
+            
+            if targets['easy'] > 0:
+                total_targets += 1
+                if lc_easy >= targets['easy']:
+                    targets_met += 1
+            
+            if targets['medium'] > 0:
+                total_targets += 1
+                if lc_medium >= targets['medium']:
+                    targets_met += 1
+            
+            if targets['hard'] > 0:
+                total_targets += 1
+                if lc_hard >= targets['hard']:
+                    targets_met += 1
+            
+            if targets_met == total_targets:
+                achievement_status = "🎉 *All targets achieved!* Excellent work! 💪"
+            elif targets_met > 0:
+                achievement_status = f"🎯 *{targets_met}/{total_targets} targets achieved.* Keep pushing! 🚀"
+            else:
+                achievement_status = f"💪 *0/{total_targets} targets achieved.* Let's get started! 🔥"
+            
+            message_parts.append(achievement_status)
 
     details = "\n\n━━━━━━━━━━━━━━━\n\n".join(message_parts)
     return details, grand_total
