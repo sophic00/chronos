@@ -15,3 +15,6 @@ wheels/
 *.env
 *.db
 *.secrets
+
+# Temp files
+scratch/

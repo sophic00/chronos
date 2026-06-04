@@ -47,6 +47,8 @@ TEST_MODE = get_env_var("TEST_MODE", "False").lower() in ("true", "1", "t")
 TEST_MODE_STATS_ONLY = get_env_var("TEST_MODE_STATS_ONLY", "False").lower() in ("true", "1", "t")
 # Set to True to include solution code in LeetCode notifications
 SEND_SOLUTION_CODE = get_env_var("SEND_SOLUTION_CODE", "False").lower() in ("true", "1", "t")
+# Set to True to send beautifully formatted image cards instead of text messages
+SEND_AS_IMAGE = get_env_var("SEND_AS_IMAGE", "True").lower() in ("true", "1", "t")
 # NOTE: LeetCode cookies expire after about 2 weeks. You will need to update them periodically.
 
 def validate_settings() -> None:
