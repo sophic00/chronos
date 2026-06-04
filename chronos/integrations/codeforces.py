@@ -1,3 +1,4 @@
+import io
 import hashlib
 import time
 import httpx
@@ -14,6 +15,7 @@ from ..config import constants
 from ..data.database import log_problem_solved
 from ..data.state_manager import get_last_submission_id, save_last_submission_id
 from ..bot.messaging import format_new_solve_message
+from ..bot.image_generator import generate_solve_card
 
 def generate_api_sig(method_name, **kwargs):
     rand = "123456"
@@ -116,24 +118,67 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE, clien
                     # Only send a notification for the first time a problem is solved.
                     if is_new_unique_solve:
                         problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
-                        
-                        message = format_new_solve_message(
-                            platform="Codeforces",
-                            problem_name=problem['name'],
-                            problem_url=problem_url,
-                            difficulty=str(rating),
-                            language=submission['programmingLanguage'],
-                            runtime=f"{submission['timeConsumedMillis']} ms",
-                            memory=f"{submission['memoryConsumedBytes'] // 1024} KB"
-                        )
-                        
-                        await context.bot.send_message(
-                            config.CHANNEL_ID, 
-                            message, 
-                            disable_web_page_preview=True,
-                            parse_mode=ParseMode.MARKDOWN
-                        )
-                        logging.info(f"Sent notification for new unique problem: CF submission {submission['id']}")
+                        if config.SEND_AS_IMAGE:
+                            try:
+                                stats = [
+                                    ("Language", submission['programmingLanguage']),
+                                    ("Time", f"{submission['timeConsumedMillis']} ms"),
+                                    ("Memory", f"{submission['memoryConsumedBytes'] // 1024} KB"),
+                                    ("Rating", str(rating))
+                                ]
+                                image_bytes = generate_solve_card(
+                                    platform="Codeforces",
+                                    title=problem['name'],
+                                    difficulty=str(rating),
+                                    stats=stats
+                                )
+                                
+                                caption = (
+                                    f"👾 *New Solve on Codeforces!*\n"
+                                    f"📘 *Problem:* [{problem['name']}]({problem_url})\n"
+                                    f"🏷️ *Rating:* {rating}"
+                                )
+                                
+                                await context.bot.send_photo(
+                                    chat_id=config.CHANNEL_ID,
+                                    photo=io.BytesIO(image_bytes),
+                                    caption=caption,
+                                    parse_mode=ParseMode.MARKDOWN
+                                )
+                                logging.info(f"Sent photo notification for new unique problem: CF submission {submission['id']}")
+                            except Exception as img_err:
+                                logging.error(f"Failed to generate/send image notification for CF {submission['id']}: {img_err}. Falling back to text.", exc_info=True)
+                                message = format_new_solve_message(
+                                    platform="Codeforces",
+                                    problem_name=problem['name'],
+                                    problem_url=problem_url,
+                                    difficulty=str(rating),
+                                    language=submission['programmingLanguage'],
+                                    runtime=f"{submission['timeConsumedMillis']} ms",
+                                    memory=f"{submission['memoryConsumedBytes'] // 1024} KB"
+                                )
+                                await context.bot.send_message(
+                                    config.CHANNEL_ID, 
+                                    message, 
+                                    disable_web_page_preview=True,
+                                    parse_mode=ParseMode.MARKDOWN
+                                )
+                        else:
+                            message = format_new_solve_message(
+                                platform="Codeforces",
+                                problem_name=problem['name'],
+                                problem_url=problem_url,
+                                difficulty=str(rating),
+                                language=submission['programmingLanguage'],
+                                runtime=f"{submission['timeConsumedMillis']} ms",
+                                memory=f"{submission['memoryConsumedBytes'] // 1024} KB"
+                            )
+                            await context.bot.send_message(
+                                config.CHANNEL_ID, 
+                                message, 
+                                disable_web_page_preview=True,
+                                parse_mode=ParseMode.MARKDOWN
+                            )
                         await asyncio.sleep(1) # Avoid rate-limiting Telegram on new solves
                     else:
                         logging.info(f"Skipping notification for already solved problem: CF submission {submission['id']}")

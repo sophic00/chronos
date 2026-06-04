@@ -1,3 +1,4 @@
+import io
 import httpx
 import asyncio
 import logging
@@ -12,6 +13,7 @@ from ..config import constants
 from ..data.database import log_problem_solved, is_problem_solved
 from ..data.state_manager import get_last_leetcode_timestamp, save_last_leetcode_timestamp
 from ..bot.messaging import format_new_solve_message
+from ..bot.image_generator import generate_solve_card
 
 def get_leetcode_headers():
     return {
@@ -274,25 +276,71 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                             code = parse_submission_code(code)
                             language_ext = get_language_extension(sub['lang'])
 
-                        message = format_new_solve_message(
-                            platform="LeetCode",
-                            problem_name=sub['title'],
-                            problem_url=problem_url,
-                            difficulty=difficulty,
-                            language=sub['lang'],
-                            runtime=runtime,
-                            memory=memory,
-                            code=code,
-                            language_ext=language_ext
-                        )
-
-                        await context.bot.send_message(
-                            config.CHANNEL_ID, 
-                            message, 
-                            disable_web_page_preview=True,
-                            parse_mode=ParseMode.MARKDOWN
-                        )
-                        logging.info(f"Sent notification for new unique problem: LC submission {sub['id']}")
+                        if config.SEND_AS_IMAGE:
+                            try:
+                                stats = [
+                                    ("Language", sub['lang']),
+                                    ("Runtime", runtime if runtime else "N/A"),
+                                    ("Memory", memory if memory else "N/A"),
+                                    ("Difficulty", difficulty if difficulty else "N/A")
+                                ]
+                                image_bytes = generate_solve_card(
+                                    platform="LeetCode",
+                                    title=sub['title'],
+                                    difficulty=difficulty if difficulty else "N/A",
+                                    stats=stats
+                                )
+                                
+                                caption = (
+                                    f"👾 *New Solve on LeetCode!*\n"
+                                    f"📘 *Problem:* [{sub['title']}]({problem_url})\n"
+                                    f"🏷️ *Difficulty:* {difficulty if difficulty else 'N/A'}"
+                                )
+                                
+                                await context.bot.send_photo(
+                                    chat_id=config.CHANNEL_ID,
+                                    photo=io.BytesIO(image_bytes),
+                                    caption=caption,
+                                    parse_mode=ParseMode.MARKDOWN
+                                )
+                                logging.info(f"Sent photo notification for new unique problem: LC submission {sub['id']}")
+                            except Exception as img_err:
+                                logging.error(f"Failed to generate/send image notification for LC {sub['id']}: {img_err}. Falling back to text.", exc_info=True)
+                                message = format_new_solve_message(
+                                    platform="LeetCode",
+                                    problem_name=sub['title'],
+                                    problem_url=problem_url,
+                                    difficulty=difficulty,
+                                    language=sub['lang'],
+                                    runtime=runtime,
+                                    memory=memory,
+                                    code=code,
+                                    language_ext=language_ext
+                                )
+                                await context.bot.send_message(
+                                    config.CHANNEL_ID, 
+                                    message, 
+                                    disable_web_page_preview=True,
+                                    parse_mode=ParseMode.MARKDOWN
+                                )
+                        else:
+                            message = format_new_solve_message(
+                                platform="LeetCode",
+                                problem_name=sub['title'],
+                                problem_url=problem_url,
+                                difficulty=difficulty,
+                                language=sub['lang'],
+                                runtime=runtime,
+                                memory=memory,
+                                code=code,
+                                language_ext=language_ext
+                            )
+                            await context.bot.send_message(
+                                config.CHANNEL_ID, 
+                                message, 
+                                disable_web_page_preview=True,
+                                parse_mode=ParseMode.MARKDOWN
+                            )
                         await asyncio.sleep(1) # Avoid rate-limiting Telegram
                     else:
                         logging.info(f"Skipping notification for already solved problem: LC submission {sub['id']}")
