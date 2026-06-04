@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Date, DateTime, Text, CheckConstraint
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.dialects.postgresql import ENUM
 
 class Base(DeclarativeBase):
     pass
