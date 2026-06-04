@@ -17,17 +17,17 @@ def log_problem_solved(platform: str, problem_id: str, rating: str) -> bool:
     """
     return db_service.log_problem_solved(platform, problem_id, rating)
 
-def get_daily_stats_from_db():
-    """Gets the count of unique problems first solved today, grouped by platform and rating."""
-    return db_service.get_daily_stats()
+def get_daily_stats_from_db(target_date=None):
+    """Gets the count of unique problems first solved on target_date, grouped by platform and rating."""
+    return db_service.get_daily_stats(target_date)
 
-def get_monthly_stats_from_db():
-    """Gets the count of unique problems first solved in the current month, grouped by platform and rating."""
-    return db_service.get_monthly_stats()
+def get_monthly_stats_from_db(target_date=None):
+    """Gets the count of unique problems first solved in the month of target_date, grouped by platform and rating."""
+    return db_service.get_monthly_stats(target_date)
 
-def get_weekly_stats_from_db():
-    """Gets the count of unique problems first solved in the current week (Monday to Sunday), grouped by platform and rating."""
-    return db_service.get_weekly_stats()
+def get_weekly_stats_from_db(target_date=None):
+    """Gets the count of unique problems first solved in the week of target_date, grouped by platform and rating."""
+    return db_service.get_weekly_stats(target_date)
 
 def get_past_day_stats_from_db():
     """Gets the count of unique problems first solved yesterday, grouped by platform and rating."""
@@ -54,3 +54,7 @@ def set_leetcode_target(target_type: str, easy: int, medium: int, hard: int) -> 
 def get_leetcode_target(target_type: str) -> dict:
     """Gets LeetCode targets for daily, weekly, or monthly."""
     return db_service.get_leetcode_target(target_type) 
+
+def is_problem_solved(platform: str, problem_id: str) -> bool:
+    """Checks if the problem has already been solved by the user."""
+    return db_service.is_problem_solved(platform, problem_id) 

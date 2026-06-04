@@ -7,6 +7,7 @@ from .database import (
     get_daily_stats_from_db,
     get_monthly_stats_from_db,
     log_problem_solved,
+    is_problem_solved,
     get_value,
     set_value
 )

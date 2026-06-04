@@ -1,7 +1,8 @@
 """ORM-based database operations using SQLAlchemy."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, timezone
+import calendar
 from typing import Dict, Optional, List
 import pytz
 from contextlib import contextmanager
@@ -30,7 +31,6 @@ class DatabaseService:
         session = self.SessionLocal()
         try:
             yield session
-            session.commit()
         except Exception as e:
             session.rollback()
             logging.error(f"Database session error: {e}")
@@ -54,8 +54,8 @@ class DatabaseService:
         """
         solve_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
         
-        with self.get_session() as session:
-            try:
+        try:
+            with self.get_session() as session:
                 # Check if the problem already exists
                 existing = session.query(SolvedProblem).filter(
                     and_(
@@ -80,23 +80,39 @@ class DatabaseService:
                 logging.info(f"Logged new ALL-TIME unique solve: {platform} - {problem_id}")
                 return True
                 
-            except SQLAlchemyError as e:
-                logging.error(f"Error logging solved problem: {e}")
-                return False
+        except SQLAlchemyError as e:
+            logging.error(f"Error logging solved problem: {e}")
+            return False
+            
+    def is_problem_solved(self, platform: str, problem_id: str) -> bool:
+        """Check if a problem has already been solved."""
+        try:
+            with self.get_session() as session:
+                existing = session.query(SolvedProblem).filter(
+                    and_(
+                        SolvedProblem.platform == platform,
+                        SolvedProblem.problem_id == problem_id
+                    )
+                ).first()
+                return existing is not None
+        except SQLAlchemyError as e:
+            logging.error(f"Error checking if problem is solved: {e}")
+            return False
     
-    def get_daily_stats(self) -> Dict[str, Dict[str, int]]:
-        """Get the count of unique problems first solved today, grouped by platform and rating."""
-        solve_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
+    def get_daily_stats(self, target_date: Optional[date] = None) -> Dict[str, Dict[str, int]]:
+        """Get the count of unique problems first solved on target_date (or today if None), grouped by platform and rating."""
+        if target_date is None:
+            target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
         stats = {}
         
-        with self.get_session() as session:
-            try:
+        try:
+            with self.get_session() as session:
                 results = session.query(
                     SolvedProblem.platform,
                     SolvedProblem.rating,
                     func.count(SolvedProblem.problem_id).label('count')
                 ).filter(
-                    SolvedProblem.first_solve_date == solve_date
+                    SolvedProblem.first_solve_date == target_date
                 ).group_by(
                     SolvedProblem.platform,
                     SolvedProblem.rating
@@ -107,25 +123,32 @@ class DatabaseService:
                         stats[platform] = {}
                     stats[platform][rating] = count
                     
-            except SQLAlchemyError as e:
-                logging.error(f"Error getting daily stats: {e}")
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting daily stats: {e}")
         
         return stats
     
-    def get_monthly_stats(self) -> Dict[str, Dict[str, int]]:
-        """Get the count of unique problems first solved in the current month, grouped by platform and rating."""
-        current_date = datetime.now(pytz.timezone(config.TIMEZONE))
-        first_day_of_month = current_date.replace(day=1).date()
+    def get_monthly_stats(self, target_date: Optional[date] = None) -> Dict[str, Dict[str, int]]:
+        """Get the count of unique problems first solved in the month of target_date (or current month if None), grouped by platform and rating."""
+        if target_date is None:
+            target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
+            
+        first_day_of_month = target_date.replace(day=1)
+        last_day = calendar.monthrange(target_date.year, target_date.month)[1]
+        last_day_of_month = target_date.replace(day=last_day)
         stats = {}
         
-        with self.get_session() as session:
-            try:
+        try:
+            with self.get_session() as session:
                 results = session.query(
                     SolvedProblem.platform,
                     SolvedProblem.rating,
                     func.count(SolvedProblem.problem_id).label('count')
                 ).filter(
-                    SolvedProblem.first_solve_date >= first_day_of_month
+                    and_(
+                        SolvedProblem.first_solve_date >= first_day_of_month,
+                        SolvedProblem.first_solve_date <= last_day_of_month
+                    )
                 ).group_by(
                     SolvedProblem.platform,
                     SolvedProblem.rating
@@ -136,27 +159,32 @@ class DatabaseService:
                         stats[platform] = {}
                     stats[platform][rating] = count
                     
-            except SQLAlchemyError as e:
-                logging.error(f"Error getting monthly stats: {e}")
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting monthly stats: {e}")
         
         return stats
     
-    def get_weekly_stats(self) -> Dict[str, Dict[str, int]]:
-        """Get the count of unique problems first solved in the current week (Monday to Sunday), grouped by platform and rating."""
-        current_date = datetime.now(pytz.timezone(config.TIMEZONE))
-        # Calculate the start of the current week (Monday)
-        days_since_monday = current_date.weekday()  # Monday is 0, Sunday is 6
-        start_of_week = (current_date - timedelta(days=days_since_monday)).date()
+    def get_weekly_stats(self, target_date: Optional[date] = None) -> Dict[str, Dict[str, int]]:
+        """Get the count of unique problems first solved in the week of target_date (Monday to Sunday) (or current week if None), grouped by platform and rating."""
+        if target_date is None:
+            target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
+            
+        days_since_monday = target_date.weekday()  # Monday is 0, Sunday is 6
+        start_of_week = target_date - timedelta(days=days_since_monday)
+        end_of_week = start_of_week + timedelta(days=6)
         stats = {}
         
-        with self.get_session() as session:
-            try:
+        try:
+            with self.get_session() as session:
                 results = session.query(
                     SolvedProblem.platform,
                     SolvedProblem.rating,
                     func.count(SolvedProblem.problem_id).label('count')
                 ).filter(
-                    SolvedProblem.first_solve_date >= start_of_week
+                    and_(
+                        SolvedProblem.first_solve_date >= start_of_week,
+                        SolvedProblem.first_solve_date <= end_of_week
+                    )
                 ).group_by(
                     SolvedProblem.platform,
                     SolvedProblem.rating
@@ -167,8 +195,8 @@ class DatabaseService:
                         stats[platform] = {}
                     stats[platform][rating] = count
                     
-            except SQLAlchemyError as e:
-                logging.error(f"Error getting weekly stats: {e}")
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting weekly stats: {e}")
         
         return stats
     
@@ -178,8 +206,8 @@ class DatabaseService:
         yesterday = (current_date - timedelta(days=1)).date()
         stats = {}
         
-        with self.get_session() as session:
-            try:
+        try:
+            with self.get_session() as session:
                 results = session.query(
                     SolvedProblem.platform,
                     SolvedProblem.rating,
@@ -196,8 +224,8 @@ class DatabaseService:
                         stats[platform] = {}
                     stats[platform][rating] = count
                     
-            except SQLAlchemyError as e:
-                logging.error(f"Error getting past day stats: {e}")
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting past day stats: {e}")
         
         return stats
     
@@ -212,8 +240,8 @@ class DatabaseService:
         end_of_previous_week = start_of_current_week - timedelta(days=1)
         stats = {}
         
-        with self.get_session() as session:
-            try:
+        try:
+            with self.get_session() as session:
                 results = session.query(
                     SolvedProblem.platform,
                     SolvedProblem.rating,
@@ -233,25 +261,25 @@ class DatabaseService:
                         stats[platform] = {}
                     stats[platform][rating] = count
                     
-            except SQLAlchemyError as e:
-                logging.error(f"Error getting past week stats: {e}")
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting past week stats: {e}")
         
         return stats
     
     def get_value(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Get a value from the key-value store."""
-        with self.get_session() as session:
-            try:
+        try:
+            with self.get_session() as session:
                 kv_pair = session.query(KeyValueStore).filter(KeyValueStore.key == key).first()
                 return kv_pair.value if kv_pair else default
-            except SQLAlchemyError as e:
-                logging.error(f"Error getting value for key '{key}': {e}")
-                return default
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting value for key '{key}': {e}")
+            return default
     
     def set_value(self, key: str, value: str) -> bool:
         """Set a value in the key-value store."""
-        with self.get_session() as session:
-            try:
+        try:
+            with self.get_session() as session:
                 kv_pair = session.query(KeyValueStore).filter(KeyValueStore.key == key).first()
                 if kv_pair:
                     kv_pair.value = str(value)
@@ -261,17 +289,17 @@ class DatabaseService:
                 
                 session.commit()
                 return True
-            except SQLAlchemyError as e:
-                logging.error(f"Error setting value for key '{key}': {e}")
-                return False
+        except SQLAlchemyError as e:
+            logging.error(f"Error setting value for key '{key}': {e}")
+            return False
     
     def set_leetcode_target(self, target_type: str, easy: int, medium: int, hard: int) -> bool:
         """Set LeetCode targets for daily, weekly, or monthly."""
         if target_type not in ['daily', 'weekly', 'monthly']:
             raise ValueError("target_type must be 'daily', 'weekly', or 'monthly'")
         
-        with self.get_session() as session:
-            try:
+        try:
+            with self.get_session() as session:
                 target = session.query(LeetCodeTarget).filter(
                     LeetCodeTarget.target_type == target_type
                 ).first()
@@ -280,7 +308,7 @@ class DatabaseService:
                     target.easy_target = easy
                     target.medium_target = medium
                     target.hard_target = hard
-                    target.updated_at = datetime.utcnow()
+                    target.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 else:
                     target = LeetCodeTarget(
                         target_type=target_type,
@@ -294,17 +322,17 @@ class DatabaseService:
                 logging.info(f"Set {target_type} LeetCode target: Easy={easy}, Medium={medium}, Hard={hard}")
                 return True
                 
-            except SQLAlchemyError as e:
-                logging.error(f"Error setting {target_type} target: {e}")
-                return False
+        except SQLAlchemyError as e:
+            logging.error(f"Error setting {target_type} target: {e}")
+            return False
     
     def get_leetcode_target(self, target_type: str) -> Dict[str, int]:
         """Get LeetCode targets for daily, weekly, or monthly."""
         if target_type not in ['daily', 'weekly', 'monthly']:
             raise ValueError("target_type must be 'daily', 'weekly', or 'monthly'")
         
-        with self.get_session() as session:
-            try:
+        try:
+            with self.get_session() as session:
                 target = session.query(LeetCodeTarget).filter(
                     LeetCodeTarget.target_type == target_type
                 ).first()
@@ -318,9 +346,9 @@ class DatabaseService:
                 else:
                     return {'easy': 0, 'medium': 0, 'hard': 0}
                     
-            except SQLAlchemyError as e:
-                logging.error(f"Error getting {target_type} target: {e}")
-                return {'easy': 0, 'medium': 0, 'hard': 0}
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting {target_type} target: {e}")
+            return {'easy': 0, 'medium': 0, 'hard': 0}
 
 
 # Create a singleton instance
