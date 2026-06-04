@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import logging
 import time as time_module
 import pytz
+import io
 
 import httpx
 from telegram import Update
@@ -12,7 +13,8 @@ from telegram.error import Conflict
 from ..config import settings as config
 from ..config import constants
 from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_past_day_stats_from_db, get_past_week_stats_from_db, set_leetcode_target, get_leetcode_target, set_value
-from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
+from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers, get_leetcode_problem_difficulty
+from .image_generator import generate_solve_card
 
 def _format_progress_bar(current: int, target: int) -> str:
     if target == 0:
@@ -211,16 +213,59 @@ async def test_codeforces_submission(app: Application):
             problem = submission["problem"]
             problem_url = f"https://codeforces.com/contest/{problem['contestId']}/problem/{problem['index']}"
             verdict = submission.get('verdict', 'N/A')
-            message = (
-                f"👾 *[TEST] Latest Submission* 👾\n\n"
-                f"**Platform:** Codeforces\n"
-                f"**Problem:** [{problem['name']}]({problem_url})\n"
-                f"**Verdict:** {verdict}\n"
-                f"**Language:** {submission['programmingLanguage']}\n"
-                f"**Time:** {submission['timeConsumedMillis']} ms\n"
-                f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
-            )
-            await app.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+            rating = problem.get('rating', 'NA')
+            
+            if config.SEND_AS_IMAGE:
+                try:
+                    stats = [
+                        ("Language", submission['programmingLanguage']),
+                        ("Time", f"{submission['timeConsumedMillis']} ms"),
+                        ("Memory", f"{submission['memoryConsumedBytes'] // 1024} KB"),
+                        ("Verdict", verdict)
+                    ]
+                    image_bytes = generate_solve_card(
+                        platform="Codeforces",
+                        title=f"[TEST] {problem['name']}",
+                        difficulty=str(rating),
+                        stats=stats
+                    )
+                    
+                    caption = (
+                        f"👾 *[TEST] Latest Submission on Codeforces*\n"
+                        f"📘 *Problem:* [{problem['name']}]({problem_url})\n"
+                        f"🏷️ *Rating:* {rating}"
+                    )
+                    
+                    await app.bot.send_photo(
+                        chat_id=config.CHANNEL_ID,
+                        photo=io.BytesIO(image_bytes),
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    logging.info(f"Sent Codeforces test photo notification for submission {submission['id']}.")
+                except Exception as img_err:
+                    logging.error(f"Failed to generate/send Codeforces test image: {img_err}. Falling back to text.", exc_info=True)
+                    message = (
+                        f"👾 *[TEST] Latest Submission* 👾\n\n"
+                        f"**Platform:** Codeforces\n"
+                        f"**Problem:** [{problem['name']}]({problem_url})\n"
+                        f"**Verdict:** {verdict}\n"
+                        f"**Language:** {submission['programmingLanguage']}\n"
+                        f"**Time:** {submission['timeConsumedMillis']} ms\n"
+                        f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
+                    )
+                    await app.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+            else:
+                message = (
+                    f"👾 *[TEST] Latest Submission* 👾\n\n"
+                    f"**Platform:** Codeforces\n"
+                    f"**Problem:** [{problem['name']}]({problem_url})\n"
+                    f"**Verdict:** {verdict}\n"
+                    f"**Language:** {submission['programmingLanguage']}\n"
+                    f"**Time:** {submission['timeConsumedMillis']} ms\n"
+                    f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
+                )
+                await app.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
             logging.info(f"Sent Codeforces test notification for submission {submission['id']}.")
         else:
             logging.warning(f"Could not fetch latest Codeforces submission. Status: {data.get('comment')}")
@@ -268,19 +313,70 @@ async def test_leetcode_submission(app: Application):
         if submissions:
             sub = submissions[0]
             problem_url = f"https://leetcode.com/problems/{sub['titleSlug']}/"
-            message = (
-                f"👾 *[TEST] Latest Submission* 👾\n\n"
-                f"**Platform:** LeetCode\n"
-                f"**Problem:** [{sub['title']}]({problem_url})\n"
-                f"**Language:** {sub['lang']}"
-            )
+            
+            # Fetch difficulty and details
+            difficulty = await get_leetcode_problem_difficulty(sub['titleSlug'])
+            if not difficulty:
+                difficulty = "N/A"
             details = await get_leetcode_submission_details(int(sub['id']))
+            runtime = memory = None
             if details and details.get('runtime') is not None and details.get('memory') is not None:
-                memory_kb = details['memory'] // 1024
-                message += f"\n**Runtime:** {details['runtime']} ms\n**Memory:** {memory_kb} KB"
+                runtime = f"{details['runtime']} ms"
+                memory = f"{details['memory'] // 1024} KB"
+                
+            if config.SEND_AS_IMAGE:
+                try:
+                    stats = [
+                        ("Language", sub['lang']),
+                        ("Runtime", runtime if runtime else "N/A"),
+                        ("Memory", memory if memory else "N/A"),
+                        ("Difficulty", difficulty if difficulty else "N/A")
+                    ]
+                    image_bytes = generate_solve_card(
+                        platform="LeetCode",
+                        title=f"[TEST] {sub['title']}",
+                        difficulty=difficulty,
+                        stats=stats
+                    )
+                    
+                    caption = (
+                        f"👾 *[TEST] Latest Submission on LeetCode*\n"
+                        f"📘 *Problem:* [{sub['title']}]({problem_url})\n"
+                        f"🏷️ *Difficulty:* {difficulty}"
+                    )
+                    
+                    await app.bot.send_photo(
+                        chat_id=config.CHANNEL_ID,
+                        photo=io.BytesIO(image_bytes),
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    logging.info(f"Sent LeetCode test photo notification for submission {sub['id']}")
+                except Exception as img_err:
+                    logging.error(f"Failed to generate/send LeetCode test image: {img_err}. Falling back to text.", exc_info=True)
+                    message = (
+                        f"👾 *[TEST] Latest Submission* 👾\n\n"
+                        f"**Platform:** LeetCode\n"
+                        f"**Problem:** [{sub['title']}]({problem_url})\n"
+                        f"**Language:** {sub['lang']}"
+                    )
+                    if runtime and memory:
+                        message += f"\n**Runtime:** {runtime}\n**Memory:** {memory}"
+                    else:
+                        message += "\n_(Could not fetch runtime/memory details)_"
+                    await app.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
             else:
-                 message += "\n_(Could not fetch runtime/memory details)_"
-            await app.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+                message = (
+                    f"👾 *[TEST] Latest Submission* 👾\n\n"
+                    f"**Platform:** LeetCode\n"
+                    f"**Problem:** [{sub['title']}]({problem_url})\n"
+                    f"**Language:** {sub['lang']}"
+                )
+                if runtime and memory:
+                    message += f"\n**Runtime:** {runtime}\n**Memory:** {memory}"
+                else:
+                    message += "\n_(Could not fetch runtime/memory details)_"
+                await app.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
             logging.info(f"Sent LeetCode test notification for submission ID {sub['id']}")
         else:
             logging.warning("Could not find any recent LeetCode submissions to test.")
