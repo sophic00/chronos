@@ -281,17 +281,10 @@ def generate_solve_card(platform: str, title: str, difficulty: str, stats: list[
             
         draw.text((col_x + 36, start_y + 80), cleaned_val, fill=(255, 255, 255, 255), font=val_font)
         
-    # 4. Create the final output image with rounded corners and transparent background outside
+    # 4. Create the final output image with solid rectangular background (no rounded corners, no transparency at the edges)
     final_w = 1600
     final_h = 700
-    canvas = Image.new("RGBA", (final_w, final_h), (0, 0, 0, 0))
-    canvas_solid = Image.new("RGBA", (final_w, final_h), (8, 11, 16, 255))
-    canvas_mask = Image.new("L", (final_w, final_h), 0)
-    draw_cm = ImageDraw.Draw(canvas_mask)
-    # Using radius 64 for the outer canvas rounding (becomes 32 on resized 800x350)
-    draw_cm.rounded_rectangle((0, 0, final_w, final_h), radius=64, fill=255)
-    
-    canvas.paste(canvas_solid, (0, 0), mask=canvas_mask)
+    canvas = Image.new("RGB", (final_w, final_h), (8, 11, 16))
     canvas.paste(card, (40, 40), mask=card)
     
     # 5. Downscale with LANCZOS filter to 1x size (800x350)
