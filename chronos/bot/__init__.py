@@ -3,6 +3,7 @@ Telegram bot interface module for Chronos bot.
 """
 
 from .messaging import format_new_solve_message
+from .image_generator import generate_solve_card
 from .handlers import (
     register_handlers,
     test_codeforces_submission,
