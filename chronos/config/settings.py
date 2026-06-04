@@ -16,7 +16,7 @@ def get_env_var(var_name, default=None):
     return value.strip().strip("'\"").strip()
 
 # Database
-DATABASE_URL = get_env_var("DATABASE_URL")
+DATABASE_URL = get_env_var("DATABASE_URL", "sqlite:///data/chronos.db")
 
 # Codeforces
 CF_API_KEY = get_env_var("CF_API_KEY")
@@ -30,7 +30,14 @@ CSRF_TOKEN = get_env_var("CSRF_TOKEN")
 
 # Telegram
 BOT_TOKEN = get_env_var("BOT_TOKEN")
-CHANNEL_ID = int(get_env_var("CHANNEL_ID"))
+CHANNEL_ID_RAW = get_env_var("CHANNEL_ID")
+CHANNEL_ID = None
+if CHANNEL_ID_RAW:
+    try:
+        CHANNEL_ID = int(CHANNEL_ID_RAW)
+    except ValueError:
+        pass
+
 TIMEZONE = get_env_var("TIMEZONE", "Asia/Kolkata")
 
 # --- Bot Settings ---
@@ -40,4 +47,29 @@ TEST_MODE = get_env_var("TEST_MODE", "False").lower() in ("true", "1", "t")
 TEST_MODE_STATS_ONLY = get_env_var("TEST_MODE_STATS_ONLY", "False").lower() in ("true", "1", "t")
 # Set to True to include solution code in LeetCode notifications
 SEND_SOLUTION_CODE = get_env_var("SEND_SOLUTION_CODE", "False").lower() in ("true", "1", "t")
-# NOTE: LeetCode cookies expire after about 2 weeks. You will need to update them periodically. 
+# NOTE: LeetCode cookies expire after about 2 weeks. You will need to update them periodically.
+
+def validate_settings() -> None:
+    """
+    Validates required settings and throws informative ValueError if invalid.
+    Runs on bot startup.
+    """
+    errors = []
+    
+    if not BOT_TOKEN:
+        errors.append("BOT_TOKEN is missing or empty.")
+    
+    if not CHANNEL_ID_RAW:
+        errors.append("CHANNEL_ID is missing or empty.")
+    elif CHANNEL_ID is None:
+        errors.append(f"CHANNEL_ID must be a valid integer, got '{CHANNEL_ID_RAW}'.")
+        
+    if not CF_HANDLE:
+        errors.append("CF_HANDLE is missing or empty.")
+        
+    if not LEETCODE_USERNAME:
+        errors.append("LEETCODE_USERNAME is missing or empty.")
+        
+    if errors:
+        raise ValueError("Configuration validation failed:\n" + "\n".join(f"- {err}" for err in errors))
+ 
