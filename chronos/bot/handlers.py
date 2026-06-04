@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import logging
 import time as time_module
+import pytz
 
 import httpx
 from telegram import Update
@@ -10,7 +11,7 @@ from telegram.error import Conflict
 
 from ..config import settings as config
 from ..config import constants
-from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_past_day_stats_from_db, get_past_week_stats_from_db, set_leetcode_target, get_leetcode_target
+from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_past_day_stats_from_db, get_past_week_stats_from_db, set_leetcode_target, get_leetcode_target, set_value
 from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers
 
 def _format_progress_bar(current: int, target: int) -> str:
@@ -41,20 +42,10 @@ def _format_summary_message(stats: dict, target_type: str = None) -> tuple[str, 
     cf_stats = stats.get("codeforces", {})
     
     # LeetCode stats
-    lc_easy = 0
-    lc_medium = 0
-    lc_hard = 0
-    lc_na = 0
-
-    for difficulty, count in lc_stats.items():
-        if difficulty == "Easy":
-            lc_easy += count
-        elif difficulty == "Medium":
-            lc_medium += count
-        elif difficulty == "Hard":
-            lc_hard += count
-        else:
-            lc_na += count
+    lc_easy = lc_stats.get("Easy", 0)
+    lc_medium = lc_stats.get("Medium", 0)
+    lc_hard = lc_stats.get("Hard", 0)
+    lc_na = sum(count for diff, count in lc_stats.items() if diff not in ("Easy", "Medium", "Hard"))
     
     lc_total = sum(lc_stats.values())
 
@@ -156,15 +147,17 @@ def _format_summary_message(stats: dict, target_type: str = None) -> tuple[str, 
     return details, grand_total
 
 
-def get_daily_summary_message() -> str:
-    """Generates the daily summary message content."""
-    stats = get_daily_stats_from_db()
+def get_daily_summary_message(target_date=None) -> str:
+    """Generates the daily summary message content for target_date (or today if None)."""
+    if target_date is None:
+        target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
+    stats = get_daily_stats_from_db(target_date)
     summary_details, grand_total = _format_summary_message(stats, 'daily')
 
     if grand_total == 0:
         return "yet another uneventful day."
     
-    date_str = datetime.now().strftime("%B %d, %Y")
+    date_str = target_date.strftime("%B %d, %Y")
 
     return (
         f"📊 *Daily Coding Report*\n"
@@ -176,12 +169,17 @@ def get_daily_summary_message() -> str:
         f"🎯 *Grand Total Solved Today:* {grand_total}"
     )
 
-async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
+async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, target_date=None):
     """Sends the daily summary message to the channel."""
     logging.info("Sending daily summary...")
-    message = get_daily_summary_message()
+    if target_date is None:
+        target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
+    message = get_daily_summary_message(target_date)
     await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
     logging.info("Daily summary sent.")
+    
+    # Track the sent summary date in the database
+    set_value("last_sent_daily_summary_date", target_date.isoformat())
 
 
 async def test_codeforces_submission(app: Application):

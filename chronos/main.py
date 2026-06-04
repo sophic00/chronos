@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from datetime import time, datetime, timedelta
+from datetime import time, datetime, timedelta, date
 import calendar
 
 import pytz
@@ -9,7 +9,7 @@ from telegram.ext import Application, ContextTypes
 from telegram.constants import ParseMode
 
 from .config import settings as config
-from .data.database import init_db, get_monthly_stats_from_db, get_weekly_stats_from_db
+from .data.database import init_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_value, set_value
 from .data.state_manager import (
     get_last_submission_id,
     save_last_submission_id,
@@ -36,6 +36,131 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
+
+
+async def recover_missed_summaries(application: Application) -> None:
+    """Checks the key-value store and recovers any missed scheduled daily, weekly, or monthly summaries."""
+    
+    tz = pytz.timezone(config.TIMEZONE)
+    now = datetime.now(tz).date()
+    
+    # --- Daily Summary Recovery ---
+    yesterday = now - timedelta(days=1)
+    last_daily_raw = get_value("last_sent_daily_summary_date")
+    
+    if not last_daily_raw:
+        # First run: initialize baseline to yesterday to avoid spamming
+        set_value("last_sent_daily_summary_date", yesterday.isoformat())
+        logger.info(f"Initialized daily summary baseline to {yesterday.isoformat()}")
+    else:
+        try:
+            last_daily = date.fromisoformat(last_daily_raw)
+            if last_daily < yesterday:
+                logger.warning(f"Detected missed daily summary. Last sent: {last_daily_raw}, expected: {yesterday.isoformat()}. Recovering...")
+                message = get_daily_summary_message(yesterday)
+                if message != "yet another uneventful day.":
+                    await application.bot.send_message(
+                        config.CHANNEL_ID,
+                        message,
+                        disable_web_page_preview=True,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                set_value("last_sent_daily_summary_date", yesterday.isoformat())
+                logger.info(f"Successfully recovered daily summary for {yesterday.isoformat()}")
+        except ValueError:
+            logger.error(f"Invalid date format in DB for last_sent_daily_summary_date: {last_daily_raw}")
+            set_value("last_sent_daily_summary_date", yesterday.isoformat())
+
+    # --- Weekly Summary Recovery ---
+    days_since_monday = now.weekday()
+    start_of_current_week = now - timedelta(days=days_since_monday)
+    start_of_previous_week = start_of_current_week - timedelta(days=7)
+    
+    last_weekly_raw = get_value("last_sent_weekly_summary_date")
+    if not last_weekly_raw:
+        # First run: initialize baseline to previous week to avoid spamming
+        set_value("last_sent_weekly_summary_date", start_of_previous_week.isoformat())
+        logger.info(f"Initialized weekly summary baseline to {start_of_previous_week.isoformat()}")
+    else:
+        try:
+            last_weekly = date.fromisoformat(last_weekly_raw)
+            if last_weekly < start_of_previous_week:
+                logger.warning(f"Detected missed weekly summary. Last sent: {last_weekly_raw}, expected: {start_of_previous_week.isoformat()}. Recovering...")
+                stats = get_weekly_stats_from_db(start_of_previous_week)
+                summary_details, grand_total = _format_summary_message(stats, 'weekly')
+                
+                end_of_previous_week = start_of_previous_week + timedelta(days=6)
+                week_range = f"{start_of_previous_week.strftime('%b %d')} - {end_of_previous_week.strftime('%b %d, %Y')}"
+                
+                if grand_total == 0:
+                    message = f"No problems were solved during the week {week_range}. Let's step up next week! 💪"
+                else:
+                    message = (
+                        f"📊 *Weekly Progress Report (RECOVERED)*\n"
+                        f"🗓️ *Period:* {week_range}\n"
+                        f"🚀 *Progress Overview*\n\n"
+                        f"━━━━━━━━━━━━━━━\n\n"
+                        f"{summary_details}\n\n"
+                        f"━━━━━━━━━━━━━━━\n\n"
+                        f"🎯 *Grand Total Solved Last Week:* {grand_total}"
+                    )
+                
+                await application.bot.send_message(
+                    config.CHANNEL_ID,
+                    message,
+                    disable_web_page_preview=True,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                set_value("last_sent_weekly_summary_date", start_of_previous_week.isoformat())
+                logger.info(f"Successfully recovered weekly summary for {week_range}")
+        except ValueError:
+            logger.error(f"Invalid date format in DB for last_sent_weekly_summary_date: {last_weekly_raw}")
+            set_value("last_sent_weekly_summary_date", start_of_previous_week.isoformat())
+
+    # --- Monthly Summary Recovery ---
+    first_day_of_current_month = now.replace(day=1)
+    if first_day_of_current_month.month == 1:
+        first_day_of_previous_month = first_day_of_current_month.replace(year=first_day_of_current_month.year - 1, month=12)
+    else:
+        first_day_of_previous_month = first_day_of_current_month.replace(month=first_day_of_current_month.month - 1)
+        
+    last_monthly_raw = get_value("last_sent_monthly_summary_date")
+    if not last_monthly_raw:
+        set_value("last_sent_monthly_summary_date", first_day_of_previous_month.isoformat())
+        logger.info(f"Initialized monthly summary baseline to {first_day_of_previous_month.isoformat()}")
+    else:
+        try:
+            last_monthly = date.fromisoformat(last_monthly_raw)
+            if last_monthly < first_day_of_previous_month:
+                logger.warning(f"Detected missed monthly summary. Last sent: {last_monthly_raw}, expected: {first_day_of_previous_month.isoformat()}. Recovering...")
+                stats = get_monthly_stats_from_db(first_day_of_previous_month)
+                summary_details, grand_total = _format_summary_message(stats, 'monthly')
+                month_year = first_day_of_previous_month.strftime("%B %Y")
+                
+                if grand_total == 0:
+                    message = f"No problems were solved during the month {month_year}. Let's do better this month! 💪"
+                else:
+                    message = (
+                        f"📊 *Monthly Progress Report (RECOVERED)*\n"
+                        f"🗓️ *Period:* {month_year}\n"
+                        f"🚀 *Progress Overview*\n\n"
+                        f"━━━━━━━━━━━━━━━\n\n"
+                        f"{summary_details}\n\n"
+                        f"━━━━━━━━━━━━━━━\n\n"
+                        f"🎯 *Grand Total Solved Last Month:* {grand_total}"
+                    )
+                
+                await application.bot.send_message(
+                    config.CHANNEL_ID,
+                    message,
+                    disable_web_page_preview=True,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                set_value("last_sent_monthly_summary_date", first_day_of_previous_month.isoformat())
+                logger.info(f"Successfully recovered monthly summary for {month_year}")
+        except ValueError:
+            logger.error(f"Invalid date format in DB for last_sent_monthly_summary_date: {last_monthly_raw}")
+            set_value("last_sent_monthly_summary_date", first_day_of_previous_month.isoformat())
 
 
 async def post_initialization(application: Application):
@@ -77,6 +202,15 @@ async def post_initialization(application: Application):
         return
 
     # --- Initial State Sync (Async Part) ---
+    if get_last_submission_id() == 0:
+        logger.info("First run for Codeforces. Initializing with the latest submission ID...")
+        latest_id = await get_latest_submission_id()
+        if latest_id:
+            save_last_submission_id(latest_id)
+            logger.info(f"Initialized Codeforces. Will only report submissions newer than ID {latest_id}.")
+        else:
+            logger.warning("Could not fetch initial Codeforces submission ID.")
+
     if get_last_leetcode_timestamp() == 0:
         logger.info("First run for LeetCode. Initializing with the latest submission timestamp...")
         latest_ts = await get_latest_leetcode_submission_timestamp()
@@ -86,18 +220,22 @@ async def post_initialization(application: Application):
         else:
             logger.warning("Could not fetch initial LeetCode submission timestamp.")
 
+    # --- Recover Missed Summaries ---
+    await recover_missed_summaries(application)
 
-async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE):
+
+async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE, target_date=None):
     """Sends the monthly summary message to the channel."""
     logging.info("Sending monthly summary...")
-    stats = get_monthly_stats_from_db()
+    if target_date is None:
+        target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
+    stats = get_monthly_stats_from_db(target_date)
     summary_details, grand_total = _format_summary_message(stats, 'monthly')
 
     if grand_total == 0:
         message = "No problems were solved this month. Let's do better next month! 💪"
     else:
-        current_date = datetime.now()
-        month_year = current_date.strftime("%B %Y")
+        month_year = target_date.strftime("%B %Y")
         message = (
             f"📊 *Monthly Progress Report*\n"
             f"🗓️ *Period:* {month_year}\n"
@@ -110,21 +248,26 @@ async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
     logging.info("Monthly summary sent.")
+    
+    from .data.database import set_value
+    first_day_of_month = target_date.replace(day=1)
+    set_value("last_sent_monthly_summary_date", first_day_of_month.isoformat())
 
 
-async def send_weekly_summary(context: ContextTypes.DEFAULT_TYPE):
+async def send_weekly_summary(context: ContextTypes.DEFAULT_TYPE, target_date=None):
     """Sends the weekly summary message to the channel."""
     logging.info("Sending weekly summary...")
-    stats = get_weekly_stats_from_db()
+    if target_date is None:
+        target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
+    stats = get_weekly_stats_from_db(target_date)
     summary_details, grand_total = _format_summary_message(stats, 'weekly')
 
     if grand_total == 0:
         message = "No problems were solved this week. Let's step up next week! 💪"
     else:
-        current_date = datetime.now()
         # Calculate week range (Monday to Sunday)
-        days_since_monday = current_date.weekday()
-        start_of_week = current_date - timedelta(days=days_since_monday)
+        days_since_monday = target_date.weekday()
+        start_of_week = target_date - timedelta(days=days_since_monday)
         end_of_week = start_of_week + timedelta(days=6)
         week_range = f"{start_of_week.strftime('%b %d')} - {end_of_week.strftime('%b %d, %Y')}"
         
@@ -140,31 +283,37 @@ async def send_weekly_summary(context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
     logging.info("Weekly summary sent.")
+    
+    from .data.database import set_value
+    days_since_monday = target_date.weekday()
+    start_of_week = target_date - timedelta(days=days_since_monday)
+    set_value("last_sent_weekly_summary_date", start_of_week.isoformat())
 
 
 async def daily_check_and_send_weekly_summary(context: ContextTypes.DEFAULT_TYPE):
     """Checks if today is Sunday and sends weekly summary if so."""
-    now = datetime.now(pytz.timezone(config.TIMEZONE))
+    now = datetime.now(pytz.timezone(config.TIMEZONE)).date()
     
     # Sunday is 6 in weekday() (Monday=0, Sunday=6)
     if now.weekday() == 6:
         logging.info("Today is Sunday, sending weekly summary...")
-        await send_weekly_summary(context)
+        await send_weekly_summary(context, now)
 
 
 async def daily_check_and_send_monthly_summary(context: ContextTypes.DEFAULT_TYPE):
     """Checks if today is the last day of the month and sends monthly summary if so."""
-    now = datetime.now(pytz.timezone(config.TIMEZONE))
+    now = datetime.now(pytz.timezone(config.TIMEZONE)).date()
     last_day_of_month = calendar.monthrange(now.year, now.month)[1]
     
     if now.day == last_day_of_month:
         logging.info("Today is the last day of the month, sending monthly summary...")
-        await send_monthly_summary(context)
+        await send_monthly_summary(context, now)
 
 
 def main() -> None:
     """Sets up and runs the bot."""
     # --- Initial Setup ---
+    config.validate_settings()
     os.makedirs("data", exist_ok=True)
     if "--new-session" in sys.argv:
         logger.warning("The --new-session flag is deprecated and has no effect.")
@@ -181,16 +330,6 @@ def main() -> None:
     init_db()
     register_handlers(application)
     application.add_error_handler(error_handler)
-
-    # --- Initial State Sync (Sync Part) ---
-    if get_last_submission_id() == 0:
-        logger.info("First run for Codeforces. Initializing with the latest submission ID...")
-        latest_id = get_latest_submission_id()
-        if latest_id:
-            save_last_submission_id(latest_id)
-            logger.info(f"Initialized Codeforces. Will only report submissions newer than ID {latest_id}.")
-        else:
-            logger.warning("Could not fetch initial Codeforces submission ID.")
 
     # --- Schedule Jobs ---
     job_queue = application.job_queue
