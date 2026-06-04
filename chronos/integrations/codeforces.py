@@ -1,21 +1,22 @@
-import io
-import hashlib
-import time
-import httpx
 import asyncio
+import hashlib
+import io
 import logging
-from typing import Optional
+import time
 from contextlib import asynccontextmanager
+from typing import Optional
 
-from telegram.ext import ContextTypes
+import httpx
 from telegram.constants import ParseMode
+from telegram.ext import ContextTypes
 
-from ..config import settings as config
+from ..bot.image_generator import generate_solve_card
+from ..bot.messaging import format_new_solve_message
 from ..config import constants
+from ..config import settings as config
 from ..data.database import log_problem_solved
 from ..data.state_manager import get_last_submission_id, save_last_submission_id
-from ..bot.messaging import format_new_solve_message
-from ..bot.image_generator import generate_solve_card
+
 
 def generate_api_sig(method_name, **kwargs):
     rand = "123456"
@@ -23,6 +24,7 @@ def generate_api_sig(method_name, **kwargs):
     return hashlib.sha512(
         f"{rand}/{method_name}?{params}#{config.CF_API_SECRET}".encode("utf-8")
     ).hexdigest()
+
 
 @asynccontextmanager
 async def _get_client(client: Optional[httpx.AsyncClient] = None):
@@ -32,6 +34,7 @@ async def _get_client(client: Optional[httpx.AsyncClient] = None):
     else:
         async with httpx.AsyncClient(timeout=30.0) as new_client:
             yield new_client
+
 
 async def get_latest_submission_id(client: Optional[httpx.AsyncClient] = None):
     """Fetches the ID of the most recent submission from Codeforces."""
@@ -48,7 +51,9 @@ async def get_latest_submission_id(client: Optional[httpx.AsyncClient] = None):
         params = params_for_sig.copy()
         params["apiSig"] = "123456" + api_sig_hash
         async with _get_client(client) as active_client:
-            response = await active_client.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
+            response = await active_client.get(
+                constants.CODEFORCES_API_URL + f"/{method_name}", params=params
+            )
             response.raise_for_status()
             data = response.json()
         if data["status"] == "OK" and data["result"]:
@@ -58,12 +63,15 @@ async def get_latest_submission_id(client: Optional[httpx.AsyncClient] = None):
     except httpx.RequestError as e:
         logging.error(f"An error occurred during initial submission fetch: {e}")
     except httpx.HTTPStatusError as e:
-        logging.error(f"Codeforces API returned error status {e.response.status_code} during init: {e}")
-    except httpx.TimeoutException as e:
-        logging.error(f"Codeforces API request timed out during init: {e}")
+        logging.error(
+            f"Codeforces API returned error status {e.response.status_code} during init: {e}"
+        )
     return 0
 
-async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE, client: Optional[httpx.AsyncClient] = None):
+
+async def check_codeforces_submissions(
+    context: ContextTypes.DEFAULT_TYPE, client: Optional[httpx.AsyncClient] = None
+):
     """Checks for new successful Codeforces submissions and sends notifications."""
     logging.info("Checking for new Codeforces submissions...")
     try:
@@ -80,14 +88,16 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE, clien
         params["apiSig"] = "123456" + api_sig_hash
         # Use async httpx and support reusable client
         async with _get_client(client) as active_client:
-            response = await active_client.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
+            response = await active_client.get(
+                constants.CODEFORCES_API_URL + f"/{method_name}", params=params
+            )
             response.raise_for_status()
             data = response.json()
 
         if data["status"] == "OK":
             last_processed_id = get_last_submission_id()
             submissions = data.get("result", [])
-            
+
             if submissions and last_processed_id == 0:
                 latest_id = submissions[0]["id"]
                 save_last_submission_id(latest_id)
@@ -99,20 +109,23 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE, clien
 
             new_successful_submissions = []
             for submission in submissions:
-                if submission["id"] > last_processed_id and submission.get("verdict") == "OK":
+                if (
+                    submission["id"] > last_processed_id
+                    and submission.get("verdict") == "OK"
+                ):
                     new_successful_submissions.append(submission)
 
             if new_successful_submissions:
                 # Process them chronologically
-                for submission in sorted(new_successful_submissions, key=lambda x: x['creationTimeSeconds']):
+                for submission in sorted(
+                    new_successful_submissions, key=lambda x: x["creationTimeSeconds"]
+                ):
                     problem = submission["problem"]
                     problem_id = f"{problem.get('contestId')}-{problem.get('index')}"
-                    rating = problem.get('rating', 'NA')
+                    rating = problem.get("rating", "NA")
 
                     is_new_unique_solve = log_problem_solved(
-                        platform="codeforces", 
-                        problem_id=problem_id,
-                        rating=rating
+                        platform="codeforces", problem_id=problem_id, rating=rating
                     )
 
                     # Only send a notification for the first time a problem is solved.
@@ -121,68 +134,80 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE, clien
                         if config.SEND_AS_IMAGE:
                             try:
                                 stats = [
-                                    ("Language", submission['programmingLanguage']),
+                                    ("Language", submission["programmingLanguage"]),
                                     ("Time", f"{submission['timeConsumedMillis']} ms"),
-                                    ("Memory", f"{submission['memoryConsumedBytes'] // 1024} KB"),
-                                    ("Rating", str(rating))
+                                    (
+                                        "Memory",
+                                        f"{submission['memoryConsumedBytes'] // 1024} KB",
+                                    ),
+                                    ("Rating", str(rating)),
                                 ]
                                 image_bytes = generate_solve_card(
                                     platform="Codeforces",
-                                    title=problem['name'],
+                                    title=problem["name"],
                                     difficulty=str(rating),
-                                    stats=stats
+                                    stats=stats,
                                 )
-                                
+
                                 caption = (
                                     f"👾 *New Solve on Codeforces!*\n"
                                     f"📘 *Problem:* [{problem['name']}]({problem_url})\n"
                                     f"🏷️ *Rating:* {rating}"
                                 )
-                                
+
                                 await context.bot.send_photo(
                                     chat_id=config.CHANNEL_ID,
                                     photo=io.BytesIO(image_bytes),
                                     caption=caption,
-                                    parse_mode=ParseMode.MARKDOWN
+                                    parse_mode=ParseMode.MARKDOWN,
                                 )
-                                logging.info(f"Sent photo notification for new unique problem: CF submission {submission['id']}")
+                                logging.info(
+                                    f"Sent photo notification for new unique problem: CF submission {submission['id']}"
+                                )
                             except Exception as img_err:
-                                logging.error(f"Failed to generate/send image notification for CF {submission['id']}: {img_err}. Falling back to text.", exc_info=True)
+                                logging.error(
+                                    f"Failed to generate/send image notification for CF {submission['id']}: {img_err}. Falling back to text.",
+                                    exc_info=True,
+                                )
                                 message = format_new_solve_message(
                                     platform="Codeforces",
-                                    problem_name=problem['name'],
+                                    problem_name=problem["name"],
                                     problem_url=problem_url,
                                     difficulty=str(rating),
-                                    language=submission['programmingLanguage'],
+                                    language=submission["programmingLanguage"],
                                     runtime=f"{submission['timeConsumedMillis']} ms",
-                                    memory=f"{submission['memoryConsumedBytes'] // 1024} KB"
+                                    memory=f"{submission['memoryConsumedBytes'] // 1024} KB",
                                 )
                                 await context.bot.send_message(
-                                    config.CHANNEL_ID, 
-                                    message, 
+                                    config.CHANNEL_ID,
+                                    message,
                                     disable_web_page_preview=True,
-                                    parse_mode=ParseMode.MARKDOWN
+                                    parse_mode=ParseMode.MARKDOWN,
                                 )
                         else:
                             message = format_new_solve_message(
                                 platform="Codeforces",
-                                problem_name=problem['name'],
+                                problem_name=problem["name"],
                                 problem_url=problem_url,
                                 difficulty=str(rating),
-                                language=submission['programmingLanguage'],
+                                language=submission["programmingLanguage"],
                                 runtime=f"{submission['timeConsumedMillis']} ms",
-                                memory=f"{submission['memoryConsumedBytes'] // 1024} KB"
+                                memory=f"{submission['memoryConsumedBytes'] // 1024} KB",
                             )
                             await context.bot.send_message(
-                                config.CHANNEL_ID, 
-                                message, 
+                                config.CHANNEL_ID,
+                                message,
                                 disable_web_page_preview=True,
-                                parse_mode=ParseMode.MARKDOWN
+                                parse_mode=ParseMode.MARKDOWN,
                             )
-                        await asyncio.sleep(1) # Avoid rate-limiting Telegram on new solves
+                        await asyncio.sleep(
+                            1
+                        )  # Avoid rate-limiting Telegram on new solves
                     else:
-                        logging.info(f"Skipping notification for already solved problem: CF submission {submission['id']}")
-                    
+                        logging.info(
+                            f"Skipping notification for already solved problem: CF submission {submission['id']}"
+                        )
+
                     # ALWAYS update the last processed ID to mark this submission as seen.
                     save_last_submission_id(submission["id"])
         else:
@@ -190,9 +215,10 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE, clien
     except httpx.RequestError as e:
         logging.error(f"An error occurred with Codeforces API: {e}")
     except httpx.HTTPStatusError as e:
-        logging.error(f"Codeforces API returned error status {e.response.status_code}: {e}")
-    except httpx.TimeoutException as e:
-        logging.error(f"Codeforces API request timed out: {e}")
+        logging.error(
+            f"Codeforces API returned error status {e.response.status_code}: {e}"
+        )
     except Exception as e:
-        logging.error(f"An unexpected error occurred in Codeforces check: {e}", exc_info=True)
-
+        logging.error(
+            f"An unexpected error occurred in Codeforces check: {e}", exc_info=True
+        )
