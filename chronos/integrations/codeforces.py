@@ -3,6 +3,8 @@ import time
 import httpx
 import asyncio
 import logging
+from typing import Optional
+from contextlib import asynccontextmanager
 
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
@@ -20,7 +22,16 @@ def generate_api_sig(method_name, **kwargs):
         f"{rand}/{method_name}?{params}#{config.CF_API_SECRET}".encode("utf-8")
     ).hexdigest()
 
-def get_latest_submission_id():
+@asynccontextmanager
+async def _get_client(client: Optional[httpx.AsyncClient] = None):
+    """Helper to reuse an existing AsyncClient or yield a newly created one."""
+    if client is not None:
+        yield client
+    else:
+        async with httpx.AsyncClient(timeout=30.0) as new_client:
+            yield new_client
+
+async def get_latest_submission_id(client: Optional[httpx.AsyncClient] = None):
     """Fetches the ID of the most recent submission from Codeforces."""
     try:
         method_name = "user.status"
@@ -34,8 +45,8 @@ def get_latest_submission_id():
         api_sig_hash = generate_api_sig(method_name, **params_for_sig)
         params = params_for_sig.copy()
         params["apiSig"] = "123456" + api_sig_hash
-        with httpx.Client(timeout=30.0) as client:
-            response = client.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
+        async with _get_client(client) as active_client:
+            response = await active_client.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
             response.raise_for_status()
             data = response.json()
         if data["status"] == "OK" and data["result"]:
@@ -50,7 +61,7 @@ def get_latest_submission_id():
         logging.error(f"Codeforces API request timed out during init: {e}")
     return 0
 
-async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
+async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE, client: Optional[httpx.AsyncClient] = None):
     """Checks for new successful Codeforces submissions and sends notifications."""
     logging.info("Checking for new Codeforces submissions...")
     try:
@@ -65,19 +76,29 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
         api_sig_hash = generate_api_sig(method_name, **params_for_sig)
         params = params_for_sig.copy()
         params["apiSig"] = "123456" + api_sig_hash
-        # Use async httpx to prevent blocking other scheduled jobs
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
+        # Use async httpx and support reusable client
+        async with _get_client(client) as active_client:
+            response = await active_client.get(constants.CODEFORCES_API_URL + f"/{method_name}", params=params)
             response.raise_for_status()
             data = response.json()
 
         if data["status"] == "OK":
             last_processed_id = get_last_submission_id()
+            submissions = data.get("result", [])
+            
+            if submissions and last_processed_id == 0:
+                latest_id = submissions[0]["id"]
+                save_last_submission_id(latest_id)
+                logging.warning(
+                    f"Codeforces state was uninitialized (ID = 0). "
+                    f"Initialized baseline submission ID to {latest_id} without sending notifications."
+                )
+                return
+
             new_successful_submissions = []
-            if "result" in data:
-                for submission in data["result"]:
-                    if submission["id"] > last_processed_id and submission.get("verdict") == "OK":
-                        new_successful_submissions.append(submission)
+            for submission in submissions:
+                if submission["id"] > last_processed_id and submission.get("verdict") == "OK":
+                    new_successful_submissions.append(submission)
 
             if new_successful_submissions:
                 # Process them chronologically
@@ -129,3 +150,4 @@ async def check_codeforces_submissions(context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Codeforces API request timed out: {e}")
     except Exception as e:
         logging.error(f"An unexpected error occurred in Codeforces check: {e}", exc_info=True)
+
