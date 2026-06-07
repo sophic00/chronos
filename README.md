@@ -1,45 +1,83 @@
-# Chronos Bot
+# Chronos
 
-Telegram bot that tracks and logs solved problems on **LeetCode** and **Codeforces**, and send them as image cards to a Telegram channel. It also provides private chat commands to query statistics and set daily, weekly, or monthly coding goals.
+Telegram bot to monitor and log solved problems on LeetCode and Codeforces. It formats solved problems as clean image cards and broadcasts them to a configured Telegram channel. Additionally, the bot supports private chat commands for querying personal statistics and configuring daily, weekly, or monthly coding targets.
 
 ---
 
-## 🖼️ Image Cards Preview
+## Project Structure
 
-When `SEND_AS_IMAGE=True` is configured, the bot posts beautifully formatted image cards to the Telegram channel instead of standard text messages.
+```text
+.
+├── .env.example
+├── .github/
+│   └── workflows/
+│       └── deploy.yml
+├── Dockerfile
+├── assets/
+│   ├── solve_codeforces.png
+│   ├── solve_leetcode.png
+│   └── summary_daily.png
+├── chronos/
+│   ├── bot/
+│   │   ├── handlers.py
+│   │   ├── image_generator.py
+│   │   └── messaging.py
+│   ├── config/
+│   │   ├── constants.py
+│   │   └── settings.py
+│   ├── integrations/
+│   │   ├── codeforces.py
+│   │   └── leetcode.py
+│   └── main.py
+├── deploy.sh
+├── pyproject.toml
+├── requirements.txt
+└── tests/
+    ├── conftest.py
+    ├── test_database.py
+    ├── test_image_generator.py
+    ├── test_integrations.py
+    └── test_owner_restriction.py
+```
+
+---
+
+## Image Cards Preview
+
+When `SEND_AS_IMAGE=True` is enabled in the configuration, the bot generates and posts image cards to the Telegram channel instead of standard text messages.
 
 ### Solve Cards
 
-| LeetCode Solve Card | Codeforces Solve Card |
-| :---: | :---: |
+|             LeetCode Solve Card              |              Codeforces Solve Card               |
+| :------------------------------------------: | :----------------------------------------------: |
 | ![LeetCode Solve](assets/solve_leetcode.png) | ![Codeforces Solve](assets/solve_codeforces.png) |
 
 ### Summary Cards
 
 | Daily / Weekly / Monthly Progress Summary |
-| :---: |
+| :---------------------------------------: |
 | ![Summary Card](assets/summary_daily.png) |
 
 ---
 
-## 🤖 Available Bot Commands
+## Available Bot Commands
 
-All commands must be executed in a **private chat** with the bot.
+All commands must be executed in a private chat with the bot.
 
-| Command    | Usage                          | Description                                                                                      |
-| :--------- | :----------------------------- | :----------------------------------------------------------------------------------------------- |
-| `/ping`    | `/ping`                        | Checks bot latency and returns "Pong!".                                                          |
-| `/stats`   | `/stats`                       | Returns your coding stats and progress towards targets for the **current day**.                  |
-| `/wstats`  | `/wstats`                      | Returns your coding stats and progress towards targets for the **current week** (Monday–Sunday). |
-| `/mstats`  | `/mstats`                      | Returns your coding stats and progress towards targets for the **current month**.                |
-| `/pstats`  | `/pstats`                      | Returns your coding stats for **yesterday**.                                                     |
-| `/pwstats` | `/pwstats`                     | Returns your coding stats for the **previous week**.                                             |
-| `/dset`    | `/dset <easy> <medium> <hard>` | Sets your **daily** LeetCode targets (e.g., `/dset 2 1 0` for 2 Easy, 1 Medium, 0 Hard).         |
-| `/wset`    | `/wset <easy> <medium> <hard>` | Sets your **weekly** LeetCode targets (e.g., `/wset 10 5 1` for 10 Easy, 5 Medium, 1 Hard).      |
-| `/mset`    | `/mset <easy> <medium> <hard>` | Sets your **monthly** LeetCode targets (e.g., `/mset 40 20 5` for 40 Easy, 20 Medium, 5 Hard).   |
+| Command    | Usage                          | Description                                                                                 |
+| :--------- | :----------------------------- | :------------------------------------------------------------------------------------------ |
+| `/ping`    | `/ping`                        | Verifies bot latency and returns connection response.                                       |
+| `/stats`   | `/stats`                       | Retrieves coding statistics and target progress for the current day.                        |
+| `/wstats`  | `/wstats`                      | Retrieves coding statistics and target progress for the current week (Monday–Sunday).       |
+| `/mstats`  | `/mstats`                      | Retrieves coding statistics and target progress for the current month.                      |
+| `/pstats`  | `/pstats`                      | Retrieves coding statistics for the previous day.                                           |
+| `/pwstats` | `/pwstats`                     | Retrieves coding statistics for the previous week.                                          |
+| `/dset`    | `/dset <easy> <medium> <hard>` | Configures daily LeetCode targets (e.g., `/dset 2 1 0` for 2 Easy, 1 Medium, 0 Hard).       |
+| `/wset`    | `/wset <easy> <medium> <hard>` | Configures weekly LeetCode targets (e.g., `/wset 10 5 1` for 10 Easy, 5 Medium, 1 Hard).    |
+| `/mset`    | `/mset <easy> <medium> <hard>` | Configures monthly LeetCode targets (e.g., `/mset 40 20 5` for 40 Easy, 20 Medium, 5 Hard). |
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
-Check `.env.example` for details on how to set up the scraper credentials and configure features like `SEND_AS_IMAGE`.
+Refer to the `.env.example` file for details on setting up scraper credentials and configuring bot features, including `SEND_AS_IMAGE`.
