@@ -294,3 +294,281 @@ def generate_solve_card(platform: str, title: str, difficulty: str, stats: list[
     img_byte_arr = io.BytesIO()
     resized_canvas.save(img_byte_arr, format='PNG')
     return img_byte_arr.getvalue()
+
+
+def generate_summary_card(summary_type: str, date_str: str, stats: dict) -> bytes:
+    """Generates a beautifully formatted Daily, Weekly, or Monthly summary progress card.
+    
+    Args:
+        summary_type: "daily", "weekly", or "monthly"
+        date_str: Date/Date range string to display in header
+        stats: Dictionary containing leetcode and codeforces solve counts
+        
+    Returns:
+        bytes: The PNG file bytes.
+    """
+    ensure_assets()
+    
+    card_w = 1520
+    card_h = 620
+    radius = 48
+    border_width = 6
+    
+    card_bg = (13, 17, 23, 255)
+    box_bg = (22, 27, 34, 255)
+    
+    # Platform-specific gradient colors based on summary type
+    if summary_type.lower() == "daily":
+        grad_color1 = (139, 92, 246)   # Violet
+        grad_color2 = (6, 182, 212)    # Cyan
+        accent_color = (139, 92, 246)
+    elif summary_type.lower() == "weekly":
+        grad_color1 = (16, 185, 129)   # Emerald
+        grad_color2 = (20, 184, 166)   # Teal
+        accent_color = (16, 185, 129)
+    else: # monthly
+        grad_color1 = (245, 158, 11)   # Amber
+        grad_color2 = (244, 63, 94)    # Rose
+        accent_color = (245, 158, 11)
+        
+    font_reg_path = os.path.join(FONTS_DIR, "Roboto-Regular.ttf")
+    font_med_path = os.path.join(FONTS_DIR, "Roboto-Medium.ttf")
+    font_bold_path = os.path.join(FONTS_DIR, "Roboto-Bold.ttf")
+    
+    try:
+        title_font = ImageFont.truetype(font_bold_path, 38)
+        subtitle_font = ImageFont.truetype(font_reg_path, 22)
+        platform_font = ImageFont.truetype(font_bold_path, 28)
+        label_font = ImageFont.truetype(font_reg_path, 22)
+        val_font = ImageFont.truetype(font_bold_path, 22)
+        total_font = ImageFont.truetype(font_bold_path, 24)
+        footer_label_font = ImageFont.truetype(font_bold_path, 30)
+        footer_status_font = ImageFont.truetype(font_med_path, 24)
+    except Exception as e:
+        logger.error(f"Failed to load TrueType fonts, using fallback: {e}")
+        title_font = subtitle_font = platform_font = label_font = val_font = total_font = footer_label_font = footer_status_font = ImageFont.load_default()
+        
+    card = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
+    gradient_img = create_gradient_fast(card_w, card_h, grad_color1, grad_color2)
+    
+    border_mask = Image.new("L", (card_w, card_h), 0)
+    draw_bm = ImageDraw.Draw(border_mask)
+    draw_bm.rounded_rectangle((0, 0, card_w, card_h), radius=radius, fill=255)
+    card.paste(gradient_img, (0, 0), mask=border_mask)
+    
+    inner_w = card_w - 2 * border_width
+    inner_h = card_h - 2 * border_width
+    inner_bg = Image.new("RGBA", (inner_w, inner_h), card_bg)
+    inner_mask = Image.new("L", (inner_w, inner_h), 0)
+    draw_im = ImageDraw.Draw(inner_mask)
+    draw_im.rounded_rectangle((0, 0, inner_w, inner_h), radius=radius - border_width, fill=255)
+    card.paste(inner_bg, (border_width, border_width), mask=inner_mask)
+    
+    draw = ImageDraw.Draw(card)
+    
+    # 1. Header Centering (at y=70)
+    header_center_y = 70
+    
+    # Draw Report Chart icon
+    logo_img = Image.new("RGBA", (72, 72), (0, 0, 0, 0))
+    logo_draw = ImageDraw.Draw(logo_img)
+    logo_draw.rounded_rectangle((6, 36, 22, 66), radius=4, fill=(16, 185, 129, 255)) # Green bar
+    logo_draw.rounded_rectangle((26, 16, 42, 66), radius=4, fill=(99, 102, 241, 255)) # Violet bar
+    logo_draw.rounded_rectangle((46, 26, 62, 66), radius=4, fill=(245, 158, 11, 255)) # Amber bar
+    card.paste(logo_img, (80, header_center_y - 36), mask=logo_img)
+    
+    draw.text((180, 42), f"{summary_type.upper()} PROGRESS", fill=(255, 255, 255, 255), font=title_font)
+    draw.text((180, 92), date_str, fill=(139, 148, 158, 255), font=subtitle_font)
+    draw.text((card_w - 80, header_center_y), "SUMMARY REPORT", fill=accent_color, font=subtitle_font, anchor="rm")
+    
+    # Divider line
+    draw.line((80, 140, card_w - 80, 140), fill=(48, 54, 61, 255), width=2)
+    
+    # 2. Process Stats
+    lc_stats = stats.get("leetcode", {})
+    cf_stats = stats.get("codeforces", {})
+    
+    lc_easy = lc_stats.get("Easy", 0)
+    lc_medium = lc_stats.get("Medium", 0)
+    lc_hard = lc_stats.get("Hard", 0)
+    lc_na = sum(count for diff, count in lc_stats.items() if diff not in ("Easy", "Medium", "Hard"))
+    lc_total = sum(lc_stats.values())
+    
+    cf_800_1000 = 0
+    cf_1100_1300 = 0
+    cf_1400_1600 = 0
+    cf_1700_plus = 0
+    cf_na = 0
+    for rating_str, count in cf_stats.items():
+        if str(rating_str).isdigit():
+            rating = int(rating_str)
+            if 800 <= rating <= 1000:
+                cf_800_1000 += count
+            elif 1100 <= rating <= 1300:
+                cf_1100_1300 += count
+            elif 1400 <= rating <= 1600:
+                cf_1400_1600 += count
+            elif rating >= 1700:
+                cf_1700_plus += count
+            else:
+                cf_na += count
+        else:
+            cf_na += count
+            
+    cf_total = sum(cf_stats.values())
+    grand_total = lc_total + cf_total
+    
+    # Fetch targets from database
+    from ..data.database import get_leetcode_target
+    targets = get_leetcode_target(summary_type) if summary_type else {'easy': 0, 'medium': 0, 'hard': 0}
+    
+    # 3. Draw Two Columns
+    box_y = 170
+    box_h = 320
+    box_w = 672
+    left_x = 64
+    right_x = 784
+    
+    # --- LeetCode Box ---
+    draw.rounded_rectangle((left_x, box_y, left_x + box_w, box_y + box_h), radius=24, fill=box_bg)
+    draw.rectangle((left_x, box_y + 20, left_x + 6, box_y + box_h - 20), fill=(255, 161, 22, 255))
+    
+    draw.text((left_x + 36, box_y + 24), "LEETCODE SUMMARY", fill=(255, 161, 22, 255), font=platform_font)
+    draw.line((left_x + 36, box_y + 64, left_x + box_w - 36, box_y + 64), fill=(48, 54, 61, 255), width=1)
+    
+    # LeetCode Rows
+    lc_rows = [
+        ("Easy", lc_easy, targets.get("easy", 0) if targets else 0),
+        ("Medium", lc_medium, targets.get("medium", 0) if targets else 0),
+        ("Hard", lc_hard, targets.get("hard", 0) if targets else 0),
+        ("Other / Unrated", lc_na, 0)
+    ]
+    
+    row_start_y = box_y + 80
+    row_gap = 40
+    
+    for i, (label, val, target) in enumerate(lc_rows):
+        y = row_start_y + i * row_gap
+        # Draw label
+        draw.text((left_x + 36, y), label, fill=(139, 148, 158, 255), font=label_font)
+        
+        # Draw value & target progress bar
+        val_str = str(val)
+        if target > 0:
+            val_str = f"{val} / {target}"
+            draw.text((left_x + 220, y), val_str, fill=(255, 255, 255, 255), font=val_font)
+            
+            # Progress bar on the right of the value
+            bar_x = left_x + 320
+            bar_w = 280
+            bar_h = 14
+            # Background bar
+            draw.rounded_rectangle((bar_x, y + 6, bar_x + bar_w, y + 6 + bar_h), radius=7, fill=(48, 54, 61, 255))
+            # Filled bar
+            if val > 0:
+                fill_w = int(min(1.0, val / target) * bar_w)
+                fill_color = (34, 197, 94, 255) if val >= target else (234, 179, 8, 255)
+                draw.rounded_rectangle((bar_x, y + 6, bar_x + fill_w, y + 6 + bar_h), radius=7, fill=fill_color)
+        else:
+            draw.text((left_x + 220, y), val_str, fill=(255, 255, 255, 255), font=val_font)
+            
+    # Target status on row 5
+    if targets and (targets.get("easy", 0) > 0 or targets.get("medium", 0) > 0 or targets.get("hard", 0) > 0):
+        t_met = 0
+        t_total = 0
+        if targets.get("easy", 0) > 0:
+            t_total += 1
+            if lc_easy >= targets["easy"]:
+                t_met += 1
+        if targets.get("medium", 0) > 0:
+            t_total += 1
+            if lc_medium >= targets["medium"]:
+                t_met += 1
+        if targets.get("hard", 0) > 0:
+            t_total += 1
+            if lc_hard >= targets["hard"]:
+                t_met += 1
+        
+        status_text = f"Target Progress: {t_met} / {t_total} Met"
+        draw.text((left_x + 36, row_start_y + 4 * row_gap), status_text, fill=(255, 255, 255, 255), font=label_font)
+    else:
+        draw.text((left_x + 36, row_start_y + 4 * row_gap), "Targets: None Active", fill=(110, 118, 129, 255), font=label_font)
+        
+    # Total Leetcode row
+    total_y = box_y + box_h - 44
+    draw.line((left_x + 36, total_y - 8, left_x + box_w - 36, total_y - 8), fill=(48, 54, 61, 255), width=1)
+    draw.text((left_x + 36, total_y), "Total LeetCode", fill=(255, 255, 255, 255), font=total_font)
+    draw.text((left_x + box_w - 36, total_y), f"{lc_total} problems", fill=(255, 255, 255, 255), font=total_font, anchor="ra")
+    
+    # --- Codeforces Box ---
+    draw.rounded_rectangle((right_x, box_y, right_x + box_w, box_y + box_h), radius=24, fill=box_bg)
+    draw.rectangle((right_x, box_y + 20, right_x + 6, box_y + box_h - 20), fill=(59, 130, 246, 255))
+    
+    draw.text((right_x + 36, box_y + 24), "CODEFORCES SUMMARY", fill=(59, 130, 246, 255), font=platform_font)
+    draw.line((right_x + 36, box_y + 64, right_x + box_w - 36, box_y + 64), fill=(48, 54, 61, 255), width=1)
+    
+    cf_rows = [
+        ("Rating 800 - 1000", cf_800_1000),
+        ("Rating 1100 - 1300", cf_1100_1300),
+        ("Rating 1400 - 1600", cf_1400_1600),
+        ("Rating 1700+", cf_1700_plus),
+        ("Unrated / Other", cf_na)
+    ]
+    
+    for i, (label, val) in enumerate(cf_rows):
+        y = row_start_y + i * row_gap
+        draw.text((right_x + 36, y), label, fill=(139, 148, 158, 255), font=label_font)
+        draw.text((right_x + box_w - 36, y), str(val), fill=(255, 255, 255, 255), font=val_font, anchor="ra")
+        
+    # Total Codeforces row
+    draw.line((right_x + 36, total_y - 8, right_x + box_w - 36, total_y - 8), fill=(48, 54, 61, 255), width=1)
+    draw.text((right_x + 36, total_y), "Total Codeforces", fill=(255, 255, 255, 255), font=total_font)
+    draw.text((right_x + box_w - 36, total_y), f"{cf_total} problems", fill=(255, 255, 255, 255), font=total_font, anchor="ra")
+    
+    # 4. Footer
+    footer_center_y = 555
+    draw.text((80, footer_center_y), f"GRAND TOTAL: {grand_total} SOLVED", fill=(255, 255, 255, 255), font=footer_label_font, anchor="lm")
+    
+    # Target Achievement Text
+    if targets and (targets.get("easy", 0) > 0 or targets.get("medium", 0) > 0 or targets.get("hard", 0) > 0):
+        t_met = 0
+        t_total = 0
+        if targets.get("easy", 0) > 0:
+            t_total += 1
+            if lc_easy >= targets["easy"]:
+                t_met += 1
+        if targets.get("medium", 0) > 0:
+            t_total += 1
+            if lc_medium >= targets["medium"]:
+                t_met += 1
+        if targets.get("hard", 0) > 0:
+            t_total += 1
+            if lc_hard >= targets["hard"]:
+                t_met += 1
+                
+        if t_met == t_total:
+            status_text = "All targets achieved! Excellent!"
+            status_color = (34, 197, 94, 255)
+        elif t_met > 0:
+            status_text = f"{t_met} / {t_total} targets achieved. Keep pushing!"
+            status_color = (234, 179, 8, 255)
+        else:
+            status_text = f"0 / {t_total} targets achieved. Let's go!"
+            status_color = (239, 68, 68, 255)
+    else:
+        status_text = "Keep up the great work!"
+        status_color = (139, 148, 158, 255)
+        
+    draw.text((card_w - 80, footer_center_y), status_text, fill=status_color, font=footer_status_font, anchor="rm")
+    
+    # 5. Output Canvas
+    final_w = 1600
+    final_h = 700
+    canvas = Image.new("RGB", (final_w, final_h), (8, 11, 16))
+    canvas.paste(card, (40, 40), mask=card)
+    
+    resized_canvas = canvas.resize((800, 350), Image.Resampling.LANCZOS)
+    img_byte_arr = io.BytesIO()
+    resized_canvas.save(img_byte_arr, format='PNG')
+    return img_byte_arr.getvalue()
+
