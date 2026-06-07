@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from functools import wraps
 import logging
 import time as time_module
 import pytz
@@ -795,17 +796,31 @@ async def set_monthly_target_handler(update: Update, context: ContextTypes.DEFAU
     except ValueError:
         await update.message.reply_text("❌ All arguments must be valid integers.")
 
+def restrict_to_owner(func):
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        if config.OWNER_USER_ID is not None:
+            user = update.effective_user
+            if not user or user.id != config.OWNER_USER_ID:
+                logging.warning(f"Unauthorized command access attempt from user ID: {user.id if user else 'Unknown'}")
+                if update.message:
+                    await update.message.reply_text("❌ Unauthorized: Only the bot owner can access this command.")
+                return
+        return await func(update, context, *args, **kwargs)
+    return wrapper
+
 def register_handlers(app: Application):
     """Registers all the message handlers for the bot."""
-    app.add_handler(CommandHandler("ping", ping_handler, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("stats", stats_handler, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("mstats", monthly_stats_handler, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("wstats", weekly_stats_handler, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("pstats", past_day_stats_handler, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("pwstats", past_week_stats_handler, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("dset", set_daily_target_handler, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("wset", set_weekly_target_handler, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("mset", set_monthly_target_handler, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("ping", restrict_to_owner(ping_handler), filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("stats", restrict_to_owner(stats_handler), filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("mstats", restrict_to_owner(monthly_stats_handler), filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("wstats", restrict_to_owner(weekly_stats_handler), filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("pstats", restrict_to_owner(past_day_stats_handler), filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("pwstats", restrict_to_owner(past_week_stats_handler), filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("dset", restrict_to_owner(set_daily_target_handler), filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("wset", restrict_to_owner(set_weekly_target_handler), filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("mset", restrict_to_owner(set_monthly_target_handler), filters=filters.ChatType.PRIVATE))
+
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Logs the error and provides a specific message for conflict errors."""
