@@ -176,10 +176,47 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, target_date=Non
     logging.info("Sending daily summary...")
     if target_date is None:
         target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
-    message = get_daily_summary_message(target_date)
-    await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-    logging.info("Daily summary sent.")
+        
+    stats = get_daily_stats_from_db(target_date)
+    summary_details, grand_total = _format_summary_message(stats, 'daily')
     
+    if grand_total == 0:
+        # Fallback to plain text "yet another uneventful day."
+        message = "yet another uneventful day."
+        await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+        logging.info("Daily summary sent (no solves today).")
+    else:
+        date_str = target_date.strftime("%B %d, %Y")
+        message = (
+            f"📊 *Daily Coding Report*\n"
+            f"🗓️ *Date:* {date_str}\n"
+            f"🚀 *Progress Overview*\n\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"{summary_details}\n\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"🎯 *Grand Total Solved Today:* {grand_total}"
+        )
+        
+        if config.SEND_AS_IMAGE:
+            try:
+                # Generate summary card
+                image_bytes = generate_summary_card("daily", date_str, stats)
+                
+                # Send photo
+                await context.bot.send_photo(
+                    chat_id=config.CHANNEL_ID,
+                    photo=io.BytesIO(image_bytes),
+                    caption=message,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                logging.info("Daily summary sent as image.")
+            except Exception as img_err:
+                logging.error(f"Failed to generate/send daily summary image: {img_err}. Falling back to text.", exc_info=True)
+                await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+        else:
+            await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+            logging.info("Daily summary sent.")
+            
     # Track the sent summary date in the database
     set_value("last_sent_daily_summary_date", target_date.isoformat())
 
