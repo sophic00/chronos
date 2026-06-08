@@ -15,7 +15,7 @@ from ..config import settings as config
 from ..config import constants
 from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_past_day_stats_from_db, get_past_week_stats_from_db, set_leetcode_target, get_leetcode_target, set_value
 from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers, get_leetcode_problem_difficulty
-from .image_generator import generate_solve_card
+from .image_generator import generate_solve_card, generate_summary_card
 
 def _format_progress_bar(current: int, target: int) -> str:
     if target == 0:
@@ -445,7 +445,8 @@ async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(summary_message, disable_web_page_preview=True)
         return
 
-    date_str = datetime.now().strftime("%B %d, %Y")
+    local_tz = pytz.timezone(config.TIMEZONE)
+    date_str = datetime.now(local_tz).strftime("%B %d, %Y")
 
     summary_message = (
         f"📊 *Today's Progress So Far*\n"
@@ -457,19 +458,34 @@ async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🎯 *Grand Total Solved Today:* {grand_total}"
     )
     
-    await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    if config.SEND_AS_IMAGE:
+        try:
+            image_bytes = generate_summary_card("daily", date_str, stats)
+            await update.message.reply_photo(
+                photo=io.BytesIO(image_bytes),
+                caption=summary_message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as img_err:
+            logging.error(f"Failed to generate/send stats summary image: {img_err}. Falling back to text.", exc_info=True)
+            await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    else:
+        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+
 
 async def monthly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with the current monthly stats."""
     stats = get_monthly_stats_from_db()
     summary_details, grand_total = _format_summary_message(stats, 'monthly')
 
+    local_tz = pytz.timezone(config.TIMEZONE)
+    current_date = datetime.now(local_tz)
+    month_year = current_date.strftime("%B %Y")
+
     if grand_total == 0:
         # Check if there are monthly targets set
         targets = get_leetcode_target('monthly')
         if targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0:
-            current_date = datetime.now()
-            month_year = current_date.strftime("%B %Y")
             target_summary = (
                 f"📊 *Monthly Progress Report*\n"
                 f"🗓️ *Period:* {month_year}\n"
@@ -485,9 +501,6 @@ async def monthly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TY
             await update.message.reply_text(summary_message, disable_web_page_preview=True)
         return
 
-    current_date = datetime.now()
-    month_year = current_date.strftime("%B %Y")
-
     summary_message = (
         f"📊 *Monthly Progress Report*\n"
         f"🗓️ *Period:* {month_year}\n"
@@ -498,14 +511,28 @@ async def monthly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TY
         f"🎯 *Grand Total Solved This Month:* {grand_total}"
     )
     
-    await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    if config.SEND_AS_IMAGE:
+        try:
+            image_bytes = generate_summary_card("monthly", month_year, stats)
+            await update.message.reply_photo(
+                photo=io.BytesIO(image_bytes),
+                caption=summary_message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as img_err:
+            logging.error(f"Failed to generate/send monthly stats summary image: {img_err}. Falling back to text.", exc_info=True)
+            await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    else:
+        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+
 
 async def weekly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with the current weekly stats."""
     stats = get_weekly_stats_from_db()
     summary_details, grand_total = _format_summary_message(stats, 'weekly')
 
-    current_date = datetime.now()
+    local_tz = pytz.timezone(config.TIMEZONE)
+    current_date = datetime.now(local_tz)
     # Calculate week range (Monday to Sunday)
     days_since_monday = current_date.weekday()
     start_of_week = current_date - timedelta(days=days_since_monday)
@@ -541,19 +568,34 @@ async def weekly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         f"🎯 *Grand Total Solved This Week:* {grand_total}"
     )
     
-    await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    if config.SEND_AS_IMAGE:
+        try:
+            image_bytes = generate_summary_card("weekly", week_range, stats)
+            await update.message.reply_photo(
+                photo=io.BytesIO(image_bytes),
+                caption=summary_message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as img_err:
+            logging.error(f"Failed to generate/send weekly stats summary image: {img_err}. Falling back to text.", exc_info=True)
+            await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    else:
+        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+
 
 async def past_day_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with yesterday's stats."""
     stats = get_past_day_stats_from_db()
     summary_details, grand_total = _format_summary_message(stats, 'daily')
 
+    local_tz = pytz.timezone(config.TIMEZONE)
+    yesterday = datetime.now(local_tz) - timedelta(days=1)
+    date_str = yesterday.strftime("%B %d, %Y")
+
     if grand_total == 0:
         # Check if there are daily targets set for reference
         targets = get_leetcode_target('daily')
         if targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0:
-            yesterday = datetime.now() - timedelta(days=1)
-            date_str = yesterday.strftime("%B %d, %Y")
             target_summary = (
                 f"📊 *Yesterday's Progress Report*\n"
                 f"🗓️ *Date:* {date_str}\n"
@@ -565,14 +607,9 @@ async def past_day_stats_handler(update: Update, context: ContextTypes.DEFAULT_T
             )
             await update.message.reply_text(target_summary, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
         else:
-            yesterday = datetime.now() - timedelta(days=1)
-            date_str = yesterday.strftime("%B %d, %Y")
             summary_message = f"You didn't solve any new problems on {date_str}. 📅"
             await update.message.reply_text(summary_message, disable_web_page_preview=True)
         return
-
-    yesterday = datetime.now() - timedelta(days=1)
-    date_str = yesterday.strftime("%B %d, %Y")
 
     summary_message = (
         f"📊 *Yesterday's Progress Report*\n"
@@ -584,7 +621,20 @@ async def past_day_stats_handler(update: Update, context: ContextTypes.DEFAULT_T
         f"🎯 *Grand Total Solved Yesterday:* {grand_total}"
     )
     
-    await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    if config.SEND_AS_IMAGE:
+        try:
+            image_bytes = generate_summary_card("daily", date_str, stats)
+            await update.message.reply_photo(
+                photo=io.BytesIO(image_bytes),
+                caption=summary_message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as img_err:
+            logging.error(f"Failed to generate/send yesterday's stats summary image: {img_err}. Falling back to text.", exc_info=True)
+            await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    else:
+        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+
 
 async def past_week_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with last week's stats."""
@@ -592,7 +642,8 @@ async def past_week_stats_handler(update: Update, context: ContextTypes.DEFAULT_
     summary_details, grand_total = _format_summary_message(stats, 'weekly')
 
     # Calculate last week's date range (Monday to Sunday)
-    current_date = datetime.now()
+    local_tz = pytz.timezone(config.TIMEZONE)
+    current_date = datetime.now(local_tz)
     days_since_monday = current_date.weekday()
     start_of_current_week = current_date - timedelta(days=days_since_monday)
     start_of_last_week = start_of_current_week - timedelta(days=7)
@@ -628,7 +679,20 @@ async def past_week_stats_handler(update: Update, context: ContextTypes.DEFAULT_
         f"🎯 *Grand Total Solved Last Week:* {grand_total}"
     )
     
-    await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    if config.SEND_AS_IMAGE:
+        try:
+            image_bytes = generate_summary_card("weekly", week_range, stats)
+            await update.message.reply_photo(
+                photo=io.BytesIO(image_bytes),
+                caption=summary_message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as img_err:
+            logging.error(f"Failed to generate/send last week's stats summary image: {img_err}. Falling back to text.", exc_info=True)
+            await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    else:
+        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+
 
 async def ping_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with a pong message."""
