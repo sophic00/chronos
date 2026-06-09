@@ -66,6 +66,7 @@ All commands must be executed in a private chat with the bot.
 
 | Command    | Usage                          | Description                                                                                 |
 | :--------- | :----------------------------- | :------------------------------------------------------------------------------------------ |
+| `/help`    | `/help`                        | Lists all available bot commands and their usages.                                          |
 | `/ping`    | `/ping`                        | Verifies bot latency and returns connection response.                                       |
 | `/stats`   | `/stats`                       | Retrieves coding statistics and target progress for the current day.                        |
 | `/wstats`  | `/wstats`                      | Retrieves coding statistics and target progress for the current week (Monday–Sunday).       |
