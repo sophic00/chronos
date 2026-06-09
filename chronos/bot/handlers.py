@@ -694,6 +694,28 @@ async def past_week_stats_handler(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
 
 
+async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Replies with all available commands."""
+    help_text = (
+        "ℹ️ *Chronos Bot Help*\n\n"
+        "Here are the available commands:\n\n"
+        "📊 *Stats Commands*\n"
+        "• `/stats` - View today's progress so far\n"
+        "• `/wstats` - View current weekly progress\n"
+        "• `/mstats` - View current monthly progress\n"
+        "• `/pstats` - View yesterday's progress\n"
+        "• `/pwstats` - View last week's progress\n\n"
+        "🎯 *Target Commands*\n"
+        "• `/dset <easy> <medium> <hard>` - Set daily LeetCode targets\n"
+        "• `/wset <easy> <medium> <hard>` - Set weekly LeetCode targets\n"
+        "• `/mset <easy> <medium> <hard>` - Set monthly LeetCode targets\n\n"
+        "🔌 *Utility Commands*\n"
+        "• `/help` - Show this help message\n"
+        "• `/ping` - Check if the bot is online"
+    )
+    await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+
+
 async def ping_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with a pong message."""
     await update.message.reply_text("Pong!")
@@ -875,6 +897,7 @@ def restrict_to_owner(func):
 
 def register_handlers(app: Application):
     """Registers all the message handlers for the bot."""
+    app.add_handler(CommandHandler("help", restrict_to_owner(help_handler), filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("ping", restrict_to_owner(ping_handler), filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("stats", restrict_to_owner(stats_handler), filters=filters.ChatType.PRIVATE))
     app.add_handler(CommandHandler("mstats", restrict_to_owner(monthly_stats_handler), filters=filters.ChatType.PRIVATE))
