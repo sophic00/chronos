@@ -8,7 +8,8 @@ from chronos.bot.handlers import (
     monthly_stats_handler,
     weekly_stats_handler,
     past_day_stats_handler,
-    past_week_stats_handler
+    past_week_stats_handler,
+    help_handler
 )
 
 @pytest.mark.asyncio
@@ -167,3 +168,28 @@ async def test_past_week_stats_handler_send_as_image(mocker):
     args, kwargs = update.message.reply_photo.call_args
     assert kwargs["photo"].read() == b"fake_last_week_image_bytes"
     assert "Grand Total Solved Last Week" in kwargs["caption"]
+
+
+@pytest.mark.asyncio
+async def test_help_handler(mocker):
+    update = MagicMock(spec=Update)
+    update.message = MagicMock()
+    update.message.reply_text = AsyncMock()
+    context = MagicMock(spec=ContextTypes.DEFAULT_TYPE)
+    
+    await help_handler(update, context)
+    
+    update.message.reply_text.assert_called_once()
+    args, kwargs = update.message.reply_text.call_args
+    help_text = args[0]
+    assert "Chronos Bot Help" in help_text
+    assert "/stats" in help_text
+    assert "/wstats" in help_text
+    assert "/mstats" in help_text
+    assert "/pstats" in help_text
+    assert "/pwstats" in help_text
+    assert "/dset" in help_text
+    assert "/wset" in help_text
+    assert "/mset" in help_text
+    assert "/ping" in help_text
+    assert "/help" in help_text
