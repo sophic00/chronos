@@ -470,7 +470,8 @@ def generate_summary_card(summary_type: str, date_str: str, stats: dict) -> byte
                 fill_color = (34, 197, 94, 255) if val >= target else (234, 179, 8, 255)
                 draw.rounded_rectangle((bar_x, y + 6, bar_x + fill_w, y + 6 + bar_h), radius=7, fill=fill_color)
         else:
-            draw.text((left_x + 220, y), val_str, fill=(255, 255, 255, 255), font=val_font)
+            draw.text((left_x + box_w - 36, y), val_str, fill=(255, 255, 255, 255), font=val_font, anchor="ra")
+
             
     # Target status on row 5
     if targets and (targets.get("easy", 0) > 0 or targets.get("medium", 0) > 0 or targets.get("hard", 0) > 0):
