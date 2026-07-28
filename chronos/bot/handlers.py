@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from functools import wraps
+import calendar
 import logging
 import time as time_module
 import pytz
@@ -13,9 +14,67 @@ from telegram.error import Conflict
 
 from ..config import settings as config
 from ..config import constants
-from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_past_day_stats_from_db, get_past_week_stats_from_db, set_leetcode_target, get_leetcode_target, set_value
+from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_past_day_stats_from_db, get_past_week_stats_from_db, set_leetcode_target, get_leetcode_target, set_value, get_daily_breakdown_from_db, get_current_streak
 from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers, get_leetcode_problem_difficulty
 from .image_generator import generate_solve_card, generate_summary_card
+from .messaging import format_bytes, prettify_language
+
+def _stats_total(stats: dict) -> int:
+    """Total solve count across all platforms in a stats dictionary."""
+    return sum(sum(platform.values()) for platform in stats.values())
+
+
+def _build_summary_extras(summary_type: str, target_date) -> dict:
+    """Builds streak / delta / per-day activity extras for the summary image card.
+
+    Args:
+        summary_type: "daily", "weekly", or "monthly"
+        target_date: The reference date of the summary period.
+    """
+    extras = {"streak": get_current_streak()}
+
+    if summary_type == "daily":
+        start = target_date - timedelta(days=6)
+        breakdown = get_daily_breakdown_from_db(start, target_date)
+        extras["activity"] = [
+            ((start + timedelta(days=i)).strftime("%a")[:2],
+             breakdown.get(start + timedelta(days=i), 0))
+            for i in range(7)
+        ]
+        extras["activity_title"] = "LAST 7 DAYS"
+        previous = get_daily_stats_from_db(target_date - timedelta(days=1))
+        current = get_daily_stats_from_db(target_date)
+        extras["delta"] = _stats_total(current) - _stats_total(previous)
+        extras["delta_label"] = "VS YESTERDAY"
+    elif summary_type == "weekly":
+        start = target_date - timedelta(days=target_date.weekday())
+        breakdown = get_daily_breakdown_from_db(start, start + timedelta(days=6))
+        extras["activity"] = [
+            ((start + timedelta(days=i)).strftime("%a")[:2],
+             breakdown.get(start + timedelta(days=i), 0))
+            for i in range(7)
+        ]
+        extras["activity_title"] = "THIS WEEK"
+        previous = get_weekly_stats_from_db(start - timedelta(days=7))
+        current = get_weekly_stats_from_db(target_date)
+        extras["delta"] = _stats_total(current) - _stats_total(previous)
+        extras["delta_label"] = "VS LAST WEEK"
+    else:  # monthly
+        first_day = target_date.replace(day=1)
+        days_in_month = calendar.monthrange(target_date.year, target_date.month)[1]
+        breakdown = get_daily_breakdown_from_db(first_day, first_day + timedelta(days=days_in_month - 1))
+        extras["activity"] = [
+            (str(day), breakdown.get(first_day + timedelta(days=day - 1), 0))
+            for day in range(1, days_in_month + 1)
+        ]
+        extras["activity_title"] = target_date.strftime("%B").upper()
+        previous = get_monthly_stats_from_db(first_day - timedelta(days=1))
+        current = get_monthly_stats_from_db(target_date)
+        extras["delta"] = _stats_total(current) - _stats_total(previous)
+        extras["delta_label"] = "VS LAST MONTH"
+
+    return extras
+
 
 def _format_progress_bar(current: int, target: int) -> str:
     if target == 0:
@@ -201,7 +260,11 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, target_date=Non
         if config.SEND_AS_IMAGE:
             try:
                 # Generate summary card
-                image_bytes = generate_summary_card("daily", date_str, stats)
+                image_bytes = generate_summary_card(
+                    "daily", date_str, stats,
+                    targets=get_leetcode_target('daily'),
+                    extras=_build_summary_extras('daily', target_date)
+                )
                 
                 # Send photo
                 await context.bot.send_photo(
@@ -256,16 +319,22 @@ async def test_codeforces_submission(app: Application):
             if config.SEND_AS_IMAGE:
                 try:
                     stats = [
-                        ("Language", submission['programmingLanguage']),
+                        ("Language", prettify_language(submission['programmingLanguage'])),
                         ("Time", f"{submission['timeConsumedMillis']} ms"),
-                        ("Memory", f"{submission['memoryConsumedBytes'] // 1024} KB"),
-                        ("Verdict", verdict)
+                        ("Memory", format_bytes(submission['memoryConsumedBytes'])),
+                        ("Problem", f"{problem.get('contestId')}{problem.get('index')}")
                     ]
+                    solve_dt = datetime.fromtimestamp(
+                        submission["creationTimeSeconds"], tz=pytz.timezone(config.TIMEZONE)
+                    )
                     image_bytes = generate_solve_card(
                         platform="Codeforces",
                         title=f"[TEST] {problem['name']}",
                         difficulty=str(rating),
-                        stats=stats
+                        stats=stats,
+                        tags=problem.get("tags", [])[:3],
+                        footer_left=solve_dt.strftime("%d %b %Y, %I:%M %p"),
+                        footer_right=f"@{config.CF_HANDLE}"
                     )
                     
                     caption = (
@@ -357,24 +426,33 @@ async def test_leetcode_submission(app: Application):
             if not difficulty:
                 difficulty = "N/A"
             details = await get_leetcode_submission_details(int(sub['id']))
-            runtime = memory = None
-            if details and details.get('runtime') is not None and details.get('memory') is not None:
-                runtime = f"{details['runtime']} ms"
-                memory = f"{details['memory'] // 1024} KB"
-                
+            runtime = memory = beats = None
+            if details:
+                if details.get('runtime') is not None:
+                    runtime = f"{details['runtime']} ms"
+                if details.get('memory') is not None:
+                    memory = format_bytes(details['memory'])
+                if details.get('runtimePercentile') is not None:
+                    beats = f"{details['runtimePercentile']:.1f}%"
+
             if config.SEND_AS_IMAGE:
                 try:
                     stats = [
-                        ("Language", sub['lang']),
+                        ("Language", prettify_language(sub['lang'])),
                         ("Runtime", runtime if runtime else "N/A"),
                         ("Memory", memory if memory else "N/A"),
-                        ("Difficulty", difficulty if difficulty else "N/A")
+                        ("Beats", beats if beats else "N/A")
                     ]
+                    solve_dt = datetime.fromtimestamp(
+                        int(sub["timestamp"]), tz=pytz.timezone(config.TIMEZONE)
+                    )
                     image_bytes = generate_solve_card(
                         platform="LeetCode",
                         title=f"[TEST] {sub['title']}",
                         difficulty=difficulty,
-                        stats=stats
+                        stats=stats,
+                        footer_left=solve_dt.strftime("%d %b %Y, %I:%M %p"),
+                        footer_right=f"@{config.LEETCODE_USERNAME}"
                     )
                     
                     caption = (
@@ -460,7 +538,12 @@ async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if config.SEND_AS_IMAGE:
         try:
-            image_bytes = generate_summary_card("daily", date_str, stats)
+            today = datetime.now(local_tz).date()
+            image_bytes = generate_summary_card(
+                "daily", date_str, stats,
+                targets=get_leetcode_target('daily'),
+                extras=_build_summary_extras('daily', today)
+            )
             await update.message.reply_photo(
                 photo=io.BytesIO(image_bytes),
                 caption=summary_message,
@@ -513,7 +596,11 @@ async def monthly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TY
     
     if config.SEND_AS_IMAGE:
         try:
-            image_bytes = generate_summary_card("monthly", month_year, stats)
+            image_bytes = generate_summary_card(
+                "monthly", month_year, stats,
+                targets=get_leetcode_target('monthly'),
+                extras=_build_summary_extras('monthly', current_date.date())
+            )
             await update.message.reply_photo(
                 photo=io.BytesIO(image_bytes),
                 caption=summary_message,
@@ -570,7 +657,11 @@ async def weekly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if config.SEND_AS_IMAGE:
         try:
-            image_bytes = generate_summary_card("weekly", week_range, stats)
+            image_bytes = generate_summary_card(
+                "weekly", week_range, stats,
+                targets=get_leetcode_target('weekly'),
+                extras=_build_summary_extras('weekly', current_date.date())
+            )
             await update.message.reply_photo(
                 photo=io.BytesIO(image_bytes),
                 caption=summary_message,
@@ -623,7 +714,11 @@ async def past_day_stats_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     if config.SEND_AS_IMAGE:
         try:
-            image_bytes = generate_summary_card("daily", date_str, stats)
+            image_bytes = generate_summary_card(
+                "daily", date_str, stats,
+                targets=get_leetcode_target('daily'),
+                extras=_build_summary_extras('daily', yesterday.date())
+            )
             await update.message.reply_photo(
                 photo=io.BytesIO(image_bytes),
                 caption=summary_message,
@@ -681,7 +776,11 @@ async def past_week_stats_handler(update: Update, context: ContextTypes.DEFAULT_
     
     if config.SEND_AS_IMAGE:
         try:
-            image_bytes = generate_summary_card("weekly", week_range, stats)
+            image_bytes = generate_summary_card(
+                "weekly", week_range, stats,
+                targets=get_leetcode_target('weekly'),
+                extras=_build_summary_extras('weekly', start_of_last_week.date())
+            )
             await update.message.reply_photo(
                 photo=io.BytesIO(image_bytes),
                 caption=summary_message,
