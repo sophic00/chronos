@@ -2,9 +2,11 @@ import io
 import httpx
 import asyncio
 import logging
+from datetime import datetime
 from typing import Optional
 from contextlib import asynccontextmanager
 
+import pytz
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -12,7 +14,7 @@ from ..config import settings as config
 from ..config import constants
 from ..data.database import log_problem_solved, is_problem_solved
 from ..data.state_manager import get_last_leetcode_timestamp, save_last_leetcode_timestamp
-from ..bot.messaging import format_new_solve_message
+from ..bot.messaging import format_new_solve_message, format_bytes, prettify_language
 from ..bot.image_generator import generate_solve_card
 
 def get_leetcode_headers():
@@ -76,6 +78,8 @@ async def get_leetcode_submission_details(submission_id: int, client: Optional[h
                 submissionDetails(submissionId: $submissionId) {
                     runtime
                     memory
+                    runtimePercentile
+                    memoryPercentile
                 }
             }
         """,
@@ -262,11 +266,15 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                         problem_url = f"https://leetcode.com/problems/{sub['titleSlug']}/"
                         
                         details = await get_leetcode_submission_details(int(sub['id']), client=client)
-                        
-                        runtime = memory = None
-                        if details and details.get('runtime') is not None and details.get('memory') is not None:
-                            runtime = f"{details['runtime']} ms"
-                            memory = f"{details['memory'] // 1024} KB"
+
+                        runtime = memory = beats = None
+                        if details:
+                            if details.get('runtime') is not None:
+                                runtime = f"{details['runtime']} ms"
+                            if details.get('memory') is not None:
+                                memory = format_bytes(details['memory'])
+                            if details.get('runtimePercentile') is not None:
+                                beats = f"{details['runtimePercentile']:.1f}%"
 
                         # Get and parse the submission code only if enabled
                         code = None
@@ -279,16 +287,21 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                         if config.SEND_AS_IMAGE:
                             try:
                                 stats = [
-                                    ("Language", sub['lang']),
+                                    ("Language", prettify_language(sub['lang'])),
                                     ("Runtime", runtime if runtime else "N/A"),
                                     ("Memory", memory if memory else "N/A"),
-                                    ("Difficulty", difficulty if difficulty else "N/A")
+                                    ("Beats", beats if beats else "N/A")
                                 ]
+                                solve_dt = datetime.fromtimestamp(
+                                    int(sub["timestamp"]), tz=pytz.timezone(config.TIMEZONE)
+                                )
                                 image_bytes = generate_solve_card(
                                     platform="LeetCode",
                                     title=sub['title'],
                                     difficulty=difficulty if difficulty else "N/A",
-                                    stats=stats
+                                    stats=stats,
+                                    footer_left=solve_dt.strftime("%d %b %Y, %I:%M %p"),
+                                    footer_right=f"@{config.LEETCODE_USERNAME}"
                                 )
                                 
                                 caption = (

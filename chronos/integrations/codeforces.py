@@ -4,14 +4,16 @@ import io
 import logging
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Optional
 
 import httpx
+import pytz
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from ..bot.image_generator import generate_solve_card
-from ..bot.messaging import format_new_solve_message
+from ..bot.messaging import format_new_solve_message, format_bytes, prettify_language
 from ..config import constants
 from ..config import settings as config
 from ..data.database import log_problem_solved
@@ -134,19 +136,23 @@ async def check_codeforces_submissions(
                         if config.SEND_AS_IMAGE:
                             try:
                                 stats = [
-                                    ("Language", submission["programmingLanguage"]),
+                                    ("Language", prettify_language(submission["programmingLanguage"])),
                                     ("Time", f"{submission['timeConsumedMillis']} ms"),
-                                    (
-                                        "Memory",
-                                        f"{submission['memoryConsumedBytes'] // 1024} KB",
-                                    ),
-                                    ("Rating", str(rating)),
+                                    ("Memory", format_bytes(submission["memoryConsumedBytes"])),
+                                    ("Problem", f"{problem.get('contestId')}{problem.get('index')}"),
                                 ]
+                                solve_dt = datetime.fromtimestamp(
+                                    submission["creationTimeSeconds"],
+                                    tz=pytz.timezone(config.TIMEZONE),
+                                )
                                 image_bytes = generate_solve_card(
                                     platform="Codeforces",
                                     title=problem["name"],
                                     difficulty=str(rating),
                                     stats=stats,
+                                    tags=problem.get("tags", [])[:3],
+                                    footer_left=solve_dt.strftime("%d %b %Y, %I:%M %p"),
+                                    footer_right=f"@{config.CF_HANDLE}",
                                 )
 
                                 caption = (
@@ -176,7 +182,7 @@ async def check_codeforces_submissions(
                                     difficulty=str(rating),
                                     language=submission["programmingLanguage"],
                                     runtime=f"{submission['timeConsumedMillis']} ms",
-                                    memory=f"{submission['memoryConsumedBytes'] // 1024} KB",
+                                    memory=format_bytes(submission["memoryConsumedBytes"]),
                                 )
                                 await context.bot.send_message(
                                     config.CHANNEL_ID,
