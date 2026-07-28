@@ -1,5 +1,50 @@
 from typing import Optional
 
+_LANGUAGE_NAMES = {
+    "cpp": "C++",
+    "csharp": "C#",
+    "python": "Python",
+    "python3": "Python 3",
+    "java": "Java",
+    "javascript": "JavaScript",
+    "typescript": "TypeScript",
+    "go": "Go",
+    "rust": "Rust",
+    "kotlin": "Kotlin",
+    "swift": "Swift",
+    "ruby": "Ruby",
+    "php": "PHP",
+    "scala": "Scala",
+    "c": "C",
+    "dart": "Dart",
+    "racket": "Racket",
+    "mysql": "MySQL",
+    "mssql": "MS SQL Server",
+    "postgresql": "PostgreSQL",
+    "pandas": "Pandas",
+    "bash": "Bash",
+}
+
+def prettify_language(language: Optional[str]) -> str:
+    """Human-friendly language names: 'cpp' -> 'C++', 'C++23 (GCC 14-64, msys2)' -> 'C++23'."""
+    if not language:
+        return "N/A"
+    base = str(language).split(" (")[0].strip()
+    return _LANGUAGE_NAMES.get(base.lower(), base)
+
+def format_bytes(num_bytes) -> str:
+    """Formats a byte count as '512 B', '100 KB' or '9.0 MB'."""
+    try:
+        n = float(num_bytes)
+    except (TypeError, ValueError):
+        return "N/A"
+    if n < 1024:
+        return f"{int(n)} B"
+    kb = n / 1024
+    if kb < 1024:
+        return f"{int(round(kb))} KB"
+    return f"{kb / 1024:.1f} MB"
+
 def format_new_solve_message(
     platform: str,
     problem_name: str,
