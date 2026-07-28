@@ -6,11 +6,15 @@ from chronos.bot.image_generator import generate_solve_card, generate_summary_ca
 from chronos.data.database import set_leetcode_target, get_leetcode_target
 
 
-def _assert_png(img_bytes: bytes, width: int = 1600, height: int = 700):
+SOLVE_SIZE = (1600, 700)
+SUMMARY_SIZE = (1600, 820)
+
+
+def _assert_png(img_bytes: bytes, size: tuple = SOLVE_SIZE):
     assert isinstance(img_bytes, bytes)
     assert img_bytes.startswith(b"\x89PNG")
     with Image.open(io.BytesIO(img_bytes)) as img:
-        assert img.size == (width, height)
+        assert img.size == size
 
 
 def test_generate_solve_card():
@@ -60,15 +64,15 @@ def test_generate_summary_card_no_targets():
 
     # 1. Daily
     daily_bytes = generate_summary_card("daily", "June 07, 2026", dummy_stats)
-    _assert_png(daily_bytes)
+    _assert_png(daily_bytes, SUMMARY_SIZE)
 
     # 2. Weekly
     weekly_bytes = generate_summary_card("weekly", "Jun 01 - Jun 07, 2026", dummy_stats)
-    _assert_png(weekly_bytes)
+    _assert_png(weekly_bytes, SUMMARY_SIZE)
 
     # 3. Monthly
     monthly_bytes = generate_summary_card("monthly", "June 2026", dummy_stats)
-    _assert_png(monthly_bytes)
+    _assert_png(monthly_bytes, SUMMARY_SIZE)
 
 
 def test_generate_summary_card_with_targets_and_extras():
@@ -88,12 +92,12 @@ def test_generate_summary_card_with_targets_and_extras():
     # Daily summary with targets (medium not met, easy met, hard met)
     daily_bytes = generate_summary_card("daily", "June 07, 2026", dummy_stats,
                                         targets=targets, extras=extras)
-    _assert_png(daily_bytes)
+    _assert_png(daily_bytes, SUMMARY_SIZE)
 
     # Weekly summary with targets
     weekly_bytes = generate_summary_card("weekly", "Jun 01 - Jun 07, 2026", dummy_stats,
                                          targets=targets, extras=extras)
-    _assert_png(weekly_bytes)
+    _assert_png(weekly_bytes, SUMMARY_SIZE)
 
     # Monthly-style dense activity strip (31 days, no day labels)
     monthly_extras = dict(extras)
@@ -101,7 +105,7 @@ def test_generate_summary_card_with_targets_and_extras():
     monthly_extras["activity_title"] = "JUNE"
     monthly_bytes = generate_summary_card("monthly", "June 2026", dummy_stats,
                                           targets=targets, extras=monthly_extras)
-    _assert_png(monthly_bytes)
+    _assert_png(monthly_bytes, SUMMARY_SIZE)
 
 
 def test_get_leetcode_target_roundtrip():

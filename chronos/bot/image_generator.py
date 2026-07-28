@@ -28,9 +28,9 @@ LEETCODE_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/8/8e/LeetCod
 # Design system
 # ---------------------------------------------------------------------------
 CARD_W = 1520
-CARD_H = 620
-CANVAS_W = 1600
-CANVAS_H = 700
+SOLVE_CARD_H = 620
+SUMMARY_CARD_H = 740
+CANVAS_MARGIN = 40                # Canvas padding around the card on every side
 RADIUS = 48
 BORDER_W = 6
 
@@ -183,18 +183,18 @@ def cf_tier_color(rating) -> tuple | None:
     return (239, 68, 68)         # Grandmaster and above — red
 
 
-def _create_card(grad_color1: tuple, grad_color2: tuple) -> Image.Image:
+def _create_card(card_w: int, card_h: int, grad_color1: tuple, grad_color2: tuple) -> Image.Image:
     """Builds the rounded card with a gradient border on a transparent canvas."""
-    card = Image.new("RGBA", (CARD_W, CARD_H), (0, 0, 0, 0))
-    gradient_img = create_gradient_fast(CARD_W, CARD_H, grad_color1, grad_color2)
+    card = Image.new("RGBA", (card_w, card_h), (0, 0, 0, 0))
+    gradient_img = create_gradient_fast(card_w, card_h, grad_color1, grad_color2)
 
-    border_mask = Image.new("L", (CARD_W, CARD_H), 0)
+    border_mask = Image.new("L", (card_w, card_h), 0)
     draw_bm = ImageDraw.Draw(border_mask)
-    draw_bm.rounded_rectangle((0, 0, CARD_W, CARD_H), radius=RADIUS, fill=255)
+    draw_bm.rounded_rectangle((0, 0, card_w, card_h), radius=RADIUS, fill=255)
     card.paste(gradient_img, (0, 0), mask=border_mask)
 
-    inner_w = CARD_W - 2 * BORDER_W
-    inner_h = CARD_H - 2 * BORDER_W
+    inner_w = card_w - 2 * BORDER_W
+    inner_h = card_h - 2 * BORDER_W
     inner_bg = Image.new("RGBA", (inner_w, inner_h), CARD_BG)
     inner_mask = Image.new("L", (inner_w, inner_h), 0)
     draw_im = ImageDraw.Draw(inner_mask)
@@ -206,8 +206,10 @@ def _create_card(grad_color1: tuple, grad_color2: tuple) -> Image.Image:
 
 def _render_card(card: Image.Image) -> bytes:
     """Pastes the card onto the final canvas and returns PNG bytes at full 2x resolution."""
-    canvas = Image.new("RGB", (CANVAS_W, CANVAS_H), CANVAS_BG)
-    canvas.paste(card, (40, 40), mask=card)
+    canvas_w = card.width + 2 * CANVAS_MARGIN
+    canvas_h = card.height + 2 * CANVAS_MARGIN
+    canvas = Image.new("RGB", (canvas_w, canvas_h), CANVAS_BG)
+    canvas.paste(card, (CANVAS_MARGIN, CANVAS_MARGIN), mask=card)
     img_byte_arr = io.BytesIO()
     canvas.save(img_byte_arr, format='PNG')
     return img_byte_arr.getvalue()
@@ -282,7 +284,7 @@ def generate_solve_card(platform: str, title: str, difficulty: str, stats: list[
         platform_text = "Codeforces"
         platform_color = CF_BLUE
 
-    card = _create_card(grad_color1, grad_color2)
+    card = _create_card(CARD_W, SOLVE_CARD_H, grad_color1, grad_color2)
     draw = ImageDraw.Draw(card)
 
     # --- Header (centered at y=70) ---
@@ -426,7 +428,7 @@ def _draw_progress_row(draw: ImageDraw.ImageDraw, bx: int, box_w: int, y: int,
               font=_load_font(22, "bold"), anchor="ra")
 
     if target > 0:
-        bar_y = y + 30
+        bar_y = y + 32
         bar_w = box_w - 72
         draw.rounded_rectangle((bx + 36, bar_y, bx + 36 + bar_w, bar_y + 6),
                                radius=3, fill=DIVIDER)
@@ -444,7 +446,7 @@ def _draw_count_row(draw: ImageDraw.ImageDraw, bx: int, box_w: int, y: int,
     draw.text((bx + box_w - 36, y), str(val), fill=TEXT_PRIMARY,
               font=_load_font(22, "bold"), anchor="ra")
 
-    bar_y = y + 26
+    bar_y = y + 28
     bar_w = box_w - 72
     draw.rounded_rectangle((bx + 36, bar_y, bx + 36 + bar_w, bar_y + 6),
                            radius=3, fill=DIVIDER)
@@ -493,7 +495,7 @@ def generate_summary_card(summary_type: str, date_str: str, stats: dict,
         grad_color2 = (244, 63, 94)    # Rose
         accent_color = (245, 158, 11)
 
-    card = _create_card(grad_color1, grad_color2)
+    card = _create_card(CARD_W, SUMMARY_CARD_H, grad_color1, grad_color2)
     draw = ImageDraw.Draw(card)
 
     # --- Header (centered at y=70) ---
@@ -551,8 +553,8 @@ def generate_summary_card(summary_type: str, date_str: str, stats: dict,
     grand_total = lc_total + cf_total
 
     # --- Two columns ---
-    box_y = 160
-    box_h = 290
+    box_y = 170
+    box_h = 320
     box_w = 672
     left_x = 64
     right_x = 784
@@ -571,13 +573,13 @@ def generate_summary_card(summary_type: str, date_str: str, stats: dict,
         ("Hard", lc_hard, targets.get("hard", 0)),
         ("Other / Unrated", lc_na, 0),
     ]
-    row_start_y = box_y + 72
-    row_gap = 38
+    row_start_y = box_y + 76
+    row_gap = 44
     for i, (label, val, target) in enumerate(lc_rows):
         _draw_progress_row(draw, left_x, box_w, row_start_y + i * row_gap, label, val, target)
 
     # Total LeetCode row
-    total_line_y = box_y + 244
+    total_line_y = box_y + 268
     draw.line((left_x + 36, total_line_y, left_x + box_w - 36, total_line_y), fill=DIVIDER, width=1)
     draw.text((left_x + 36, total_line_y + 10), "Total LeetCode", fill=TEXT_PRIMARY,
               font=_load_font(24, "bold"))
@@ -600,8 +602,8 @@ def generate_summary_card(summary_type: str, date_str: str, stats: dict,
         ("Unrated / Other", cf_na, (110, 118, 129)),
     ]
     cf_max = max([count for _, count, _ in cf_rows] + [1])
-    cf_row_start_y = box_y + 70
-    cf_row_gap = 33
+    cf_row_start_y = box_y + 74
+    cf_row_gap = 38
     for i, (label, val, color) in enumerate(cf_rows):
         _draw_count_row(draw, right_x, box_w, cf_row_start_y + i * cf_row_gap,
                         label, val, color, cf_max)
@@ -618,7 +620,7 @@ def generate_summary_card(summary_type: str, date_str: str, stats: dict,
     if activity:
         activity_title = extras.get("activity_title", "")
         strip_label = f"ACTIVITY · {activity_title}" if activity_title else "ACTIVITY"
-        draw.text((64, 462), strip_label, fill=TEXT_MUTED, font=_load_font(20, "medium"))
+        draw.text((64, 514), strip_label, fill=TEXT_MUTED, font=_load_font(20, "medium"))
 
         n = len(activity)
         max_count = max([count for _, count in activity] + [1])
@@ -627,8 +629,8 @@ def generate_summary_card(summary_type: str, date_str: str, stats: dict,
         bar_w = min(56, (strip_w - (n - 1) * gap) // n)
         total_bars_w = n * bar_w + (n - 1) * gap
         bars_x = 64 + (strip_w - total_bars_w) // 2
-        bars_bottom = 542
-        max_bar_h = 50
+        bars_bottom = 606
+        max_bar_h = 60
 
         for i, (day_label, count) in enumerate(activity):
             bx = bars_x + i * (bar_w + gap)
@@ -641,8 +643,8 @@ def generate_summary_card(summary_type: str, date_str: str, stats: dict,
                           fill=TEXT_MUTED, font=_load_font(18, "regular"), anchor="ma")
 
     # --- Footer ---
-    footer_center_y = 600
-    draw.line((80, 580, CARD_W - 80, 580), fill=DIVIDER, width=2)
+    footer_center_y = 688
+    draw.line((80, 660, CARD_W - 80, 660), fill=DIVIDER, width=2)
     draw.text((80, footer_center_y), f"GRAND TOTAL: {grand_total} SOLVED",
               fill=TEXT_PRIMARY, font=_load_font(28, "bold"), anchor="lm")
 
