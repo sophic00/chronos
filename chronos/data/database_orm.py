@@ -350,6 +350,54 @@ class DatabaseService:
             logging.error(f"Error getting {target_type} target: {e}")
             return {'easy': 0, 'medium': 0, 'hard': 0}
 
+    def get_daily_breakdown(self, start_date: date, end_date: date) -> Dict[date, int]:
+        """Get the count of unique problems first solved per day in [start_date, end_date]."""
+        breakdown = {}
+        try:
+            with self.get_session() as session:
+                results = session.query(
+                    SolvedProblem.first_solve_date,
+                    func.count(SolvedProblem.problem_id).label('count')
+                ).filter(
+                    and_(
+                        SolvedProblem.first_solve_date >= start_date,
+                        SolvedProblem.first_solve_date <= end_date
+                    )
+                ).group_by(
+                    SolvedProblem.first_solve_date
+                ).all()
+
+                for solve_date, count in results:
+                    breakdown[solve_date] = count
+
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting daily breakdown: {e}")
+
+        return breakdown
+
+    def get_current_streak(self) -> int:
+        """Get the current streak of consecutive days with at least one unique solve.
+
+        If nothing has been solved yet today, the streak counts up to yesterday.
+        """
+        today = datetime.now(pytz.timezone(config.TIMEZONE)).date()
+        try:
+            with self.get_session() as session:
+                rows = session.query(SolvedProblem.first_solve_date).distinct().all()
+                solve_dates = {row[0] for row in rows}
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting current streak: {e}")
+            return 0
+
+        streak = 0
+        day = today
+        if day not in solve_dates:
+            day -= timedelta(days=1)
+        while day in solve_dates:
+            streak += 1
+            day -= timedelta(days=1)
+        return streak
+
 
 # Create a singleton instance
 db_service = DatabaseService()

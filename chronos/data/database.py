@@ -37,6 +37,14 @@ def get_past_week_stats_from_db():
     """Gets the count of unique problems first solved in the previous week (Monday to Sunday), grouped by platform and rating."""
     return db_service.get_past_week_stats()
 
+def get_daily_breakdown_from_db(start_date, end_date):
+    """Gets the count of unique problems first solved per day in [start_date, end_date]."""
+    return db_service.get_daily_breakdown(start_date, end_date)
+
+def get_current_streak():
+    """Gets the current streak of consecutive days with at least one unique solve."""
+    return db_service.get_current_streak()
+
 def get_value(key: str, default: str = None) -> str:
     """Gets a value from the key-value store."""
     return db_service.get_value(key, default)
