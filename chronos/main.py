@@ -9,7 +9,7 @@ from telegram.ext import Application, ContextTypes
 from telegram.constants import ParseMode
 
 from .config import settings as config
-from .data.database import init_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_value, set_value
+from .data.database import init_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_value, set_value, get_leetcode_target
 from .data.state_manager import (
     get_last_submission_id,
     save_last_submission_id,
@@ -26,6 +26,7 @@ from .bot.handlers import (
     get_daily_summary_message,
     error_handler,
     _format_summary_message,
+    _build_summary_extras,
     weekly_stats_handler,
 )
 
@@ -212,7 +213,11 @@ async def post_initialization(application: Application):
                             f"━━━━━━━━━━━━━━━\n\n"
                             f"🎯 *Grand Total Solved Today:* {grand_total}"
                         )
-                        image_bytes = generate_summary_card("daily", date_str, stats)
+                        image_bytes = generate_summary_card(
+                            "daily", date_str, stats,
+                            targets=get_leetcode_target('daily'),
+                            extras=_build_summary_extras('daily', datetime.now(pytz.timezone(config.TIMEZONE)).date())
+                        )
                         await application.bot.send_photo(
                             chat_id=config.CHANNEL_ID,
                             photo=io.BytesIO(image_bytes),
@@ -296,7 +301,11 @@ async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE, target_date=N
             try:
                 import io
                 from .bot.image_generator import generate_summary_card
-                image_bytes = generate_summary_card("monthly", month_year, stats)
+                image_bytes = generate_summary_card(
+                    "monthly", month_year, stats,
+                    targets=get_leetcode_target('monthly'),
+                    extras=_build_summary_extras('monthly', target_date)
+                )
                 await context.bot.send_photo(
                     chat_id=config.CHANNEL_ID,
                     photo=io.BytesIO(image_bytes),
@@ -349,7 +358,11 @@ async def send_weekly_summary(context: ContextTypes.DEFAULT_TYPE, target_date=No
             try:
                 import io
                 from .bot.image_generator import generate_summary_card
-                image_bytes = generate_summary_card("weekly", week_range, stats)
+                image_bytes = generate_summary_card(
+                    "weekly", week_range, stats,
+                    targets=get_leetcode_target('weekly'),
+                    extras=_build_summary_extras('weekly', target_date)
+                )
                 await context.bot.send_photo(
                     chat_id=config.CHANNEL_ID,
                     photo=io.BytesIO(image_bytes),
