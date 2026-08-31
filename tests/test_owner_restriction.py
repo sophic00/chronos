@@ -11,7 +11,7 @@ from chronos.config import settings
 @pytest.mark.asyncio
 async def test_restrict_to_owner_no_config(mocker):
     """If OWNER_USER_ID is not set, allow command to execute."""
-    settings.OWNER_USER_ID = None
+    mocker.patch.object(settings, "OWNER_USER_ID", None)
     
     mock_func = AsyncMock()
     decorated = restrict_to_owner(mock_func)
@@ -27,7 +27,7 @@ async def test_restrict_to_owner_no_config(mocker):
 @pytest.mark.asyncio
 async def test_restrict_to_owner_authorized(mocker):
     """If OWNER_USER_ID is set and matches user ID, allow command to execute."""
-    settings.OWNER_USER_ID = 99999
+    mocker.patch.object(settings, "OWNER_USER_ID", 99999)
     
     mock_func = AsyncMock()
     decorated = restrict_to_owner(mock_func)
@@ -43,7 +43,7 @@ async def test_restrict_to_owner_authorized(mocker):
 @pytest.mark.asyncio
 async def test_restrict_to_owner_unauthorized(mocker):
     """If OWNER_USER_ID is set and user ID does not match, block command and reply with error."""
-    settings.OWNER_USER_ID = 99999
+    mocker.patch.object(settings, "OWNER_USER_ID", 99999)
     
     mock_func = AsyncMock()
     decorated = restrict_to_owner(mock_func)

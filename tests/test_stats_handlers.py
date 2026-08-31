@@ -17,7 +17,7 @@ from chronos.config import settings
 
 @pytest.mark.asyncio
 async def test_stats_handler_send_as_image(mocker):
-    settings.SEND_AS_IMAGE = True
+    mocker.patch.object(settings, "SEND_AS_IMAGE", True)
     mocker.patch("chronos.bot.handlers.get_daily_stats_from_db", return_value={
         "leetcode": {"Easy": 1},
         "codeforces": {}
@@ -41,7 +41,7 @@ async def test_stats_handler_send_as_image(mocker):
 
 @pytest.mark.asyncio
 async def test_stats_handler_fallback_to_text(mocker):
-    settings.SEND_AS_IMAGE = False
+    mocker.patch.object(settings, "SEND_AS_IMAGE", False)
     mocker.patch("chronos.bot.handlers.get_daily_stats_from_db", return_value={
         "leetcode": {"Easy": 1},
         "codeforces": {}
@@ -61,7 +61,7 @@ async def test_stats_handler_fallback_to_text(mocker):
 
 @pytest.mark.asyncio
 async def test_stats_handler_zero_solves_falls_back_to_text(mocker):
-    settings.SEND_AS_IMAGE = True
+    mocker.patch.object(settings, "SEND_AS_IMAGE", True)
     mocker.patch("chronos.bot.handlers.get_daily_stats_from_db", return_value={})
     
     update = MagicMock(spec=Update)
@@ -78,7 +78,7 @@ async def test_stats_handler_zero_solves_falls_back_to_text(mocker):
 
 @pytest.mark.asyncio
 async def test_weekly_stats_handler_send_as_image(mocker):
-    settings.SEND_AS_IMAGE = True
+    mocker.patch.object(settings, "SEND_AS_IMAGE", True)
     mocker.patch("chronos.bot.handlers.get_weekly_stats_from_db", return_value={
         "leetcode": {"Medium": 2},
         "codeforces": {}
@@ -102,7 +102,7 @@ async def test_weekly_stats_handler_send_as_image(mocker):
 
 @pytest.mark.asyncio
 async def test_monthly_stats_handler_send_as_image(mocker):
-    settings.SEND_AS_IMAGE = True
+    mocker.patch.object(settings, "SEND_AS_IMAGE", True)
     mocker.patch("chronos.bot.handlers.get_monthly_stats_from_db", return_value={
         "leetcode": {"Hard": 1},
         "codeforces": {}
@@ -126,7 +126,7 @@ async def test_monthly_stats_handler_send_as_image(mocker):
 
 @pytest.mark.asyncio
 async def test_past_day_stats_handler_send_as_image(mocker):
-    settings.SEND_AS_IMAGE = True
+    mocker.patch.object(settings, "SEND_AS_IMAGE", True)
     mocker.patch("chronos.bot.handlers.get_past_day_stats_from_db", return_value={
         "leetcode": {"Easy": 2},
         "codeforces": {}
@@ -150,7 +150,7 @@ async def test_past_day_stats_handler_send_as_image(mocker):
 
 @pytest.mark.asyncio
 async def test_past_week_stats_handler_send_as_image(mocker):
-    settings.SEND_AS_IMAGE = True
+    mocker.patch.object(settings, "SEND_AS_IMAGE", True)
     mocker.patch("chronos.bot.handlers.get_past_week_stats_from_db", return_value={
         "leetcode": {"Easy": 5},
         "codeforces": {}
