@@ -10,7 +10,7 @@ os.environ["LEETCODE_USERNAME"] = "mock_lc_username"
 os.environ["TIMEZONE"] = "UTC"
 
 from chronos.config import settings
-from chronos.data.database_orm import db_service, Base
+from chronos.data.database import db_service, Base
 
 @pytest.fixture(scope="session", autouse=True)
 def init_test_settings():
