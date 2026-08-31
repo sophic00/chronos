@@ -4,14 +4,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_env_var(var_name, default=None):
-    """Gets an environment variable, stripping inline comments, quotes, and whitespace."""
+    """Gets an environment variable, stripping surrounding quotes and whitespace.
+
+    Inline comments are already handled by python-dotenv; cutting on '#' here
+    would corrupt legitimate values that contain it (URL fragments, passwords).
+    """
     value = os.getenv(var_name, default)
     if not value:
         return default
-    
-    if '#' in value:
-        value = value.split('#', 1)[0]
-    
+
     # Strip quotes and then any surrounding whitespace
     return value.strip().strip("'\"").strip()
 
