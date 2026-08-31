@@ -13,7 +13,12 @@ from telegram.constants import ParseMode
 from ..config import settings as config
 from ..config import constants
 from ..data.database import log_problem_solved, is_problem_solved
-from ..data.state_manager import get_last_leetcode_timestamp, save_last_leetcode_timestamp
+from ..data.state_manager import (
+    get_last_leetcode_timestamp,
+    save_last_leetcode_timestamp,
+    get_last_leetcode_boundary_ids,
+    save_last_leetcode_boundary_ids,
+)
 from ..bot.messaging import format_new_solve_message, format_bytes, prettify_language
 from ..bot.image_generator import generate_solve_card
 
@@ -228,22 +233,30 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                 return
 
             last_timestamp = get_last_leetcode_timestamp()
+            boundary_ids = get_last_leetcode_boundary_ids()
             submissions = data.get("data", {}).get("recentAcSubmissionList", [])
             
             if submissions and last_timestamp == 0:
                 latest_ts = int(submissions[0]["timestamp"])
                 save_last_leetcode_timestamp(latest_ts)
+                save_last_leetcode_boundary_ids({str(submissions[0]["id"])})
                 logging.warning(
                     f"LeetCode state was uninitialized (timestamp = 0). "
                     f"Initialized baseline timestamp to {latest_ts} without sending notifications."
                 )
                 return
 
-            new_submissions = []
-            if submissions:
-                for sub in submissions:
-                    if int(sub["timestamp"]) > last_timestamp:
-                        new_submissions.append(sub)
+            # A submission is new if its timestamp is past the watermark, or it
+            # shares the watermark timestamp but was never processed (several
+            # submissions can land in the same second).
+            new_submissions = [
+                sub for sub in submissions
+                if int(sub["timestamp"]) > last_timestamp
+                or (
+                    int(sub["timestamp"]) == last_timestamp
+                    and str(sub["id"]) not in boundary_ids
+                )
+            ]
             
             if new_submissions:
                 for sub in sorted(new_submissions, key=lambda x: int(x["timestamp"])):
@@ -251,7 +264,6 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                     
                     if is_problem_solved("leetcode", problem_id):
                         logging.info(f"Skipping notification and API queries for already solved problem: LC submission {sub['id']}")
-                        save_last_leetcode_timestamp(int(sub["timestamp"]))
                         continue
 
                     difficulty = await get_leetcode_problem_difficulty(sub['titleSlug'], client=client)
@@ -357,9 +369,14 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                         await asyncio.sleep(1) # Avoid rate-limiting Telegram
                     else:
                         logging.info(f"Skipping notification for already solved problem: LC submission {sub['id']}")
-                    
-                    # ALWAYS update the last processed timestamp
-                    save_last_leetcode_timestamp(int(sub["timestamp"]))
+
+                # Advance the watermark only after the whole batch is processed;
+                # record the IDs sharing the newest timestamp so they are not
+                # re-notified (or dropped) on the next poll.
+                max_ts = max(int(s["timestamp"]) for s in new_submissions)
+                boundary = {str(s["id"]) for s in new_submissions if int(s["timestamp"]) == max_ts}
+                save_last_leetcode_timestamp(max_ts)
+                save_last_leetcode_boundary_ids(boundary)
 
     except httpx.RequestError as e:
         logging.error(f"An error occurred with LeetCode API: {e}")

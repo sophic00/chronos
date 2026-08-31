@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+from chronos.config import settings
 from chronos.integrations.leetcode import check_leetcode_submissions
 from chronos.integrations.codeforces import check_codeforces_submissions
 
@@ -123,3 +124,42 @@ async def test_leetcode_duplicate_solve_skips_api_calls(mocker):
     difficulty_mock.assert_not_called()
     context.bot.send_message.assert_not_called()
 
+
+@pytest.mark.asyncio
+async def test_leetcode_same_second_submissions_both_processed(mocker):
+    """Two AC submissions sharing the newest timestamp must both be processed."""
+    mocker.patch.object(settings, "SEND_AS_IMAGE", False)
+    mocker.patch("chronos.integrations.leetcode.get_last_leetcode_timestamp", return_value=1620000000)
+    mocker.patch("chronos.integrations.leetcode.get_last_leetcode_boundary_ids", return_value=set())
+    save_ts_mock = mocker.patch("chronos.integrations.leetcode.save_last_leetcode_timestamp")
+    save_ids_mock = mocker.patch("chronos.integrations.leetcode.save_last_leetcode_boundary_ids")
+    mocker.patch("chronos.integrations.leetcode.is_problem_solved", return_value=False)
+    mocker.patch("chronos.integrations.leetcode.get_leetcode_problem_difficulty", return_value="Easy")
+    mocker.patch("chronos.integrations.leetcode.get_leetcode_submission_details", return_value=None)
+
+    submission = {
+        "title": "Same Second",
+        "titleSlug": "same-second-1",
+        "timestamp": "1620000005",
+        "lang": "python3"
+    }
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "data": {
+            "recentAcSubmissionList": [
+                {**submission, "id": "2001", "titleSlug": "same-second-2"},
+                {**submission, "id": "2000"},
+            ]
+        }
+    }
+    mocker.patch("httpx.AsyncClient.post", return_value=mock_response)
+
+    context = MagicMock()
+    context.bot.send_message = AsyncMock()
+
+    await check_leetcode_submissions(context)
+
+    assert context.bot.send_message.call_count == 2
+    save_ts_mock.assert_called_once_with(1620000005)
+    save_ids_mock.assert_called_once_with({"2000", "2001"})
