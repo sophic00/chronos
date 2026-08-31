@@ -9,7 +9,7 @@ from contextlib import contextmanager
 
 from sqlalchemy import create_engine, func, and_
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .models import Base, SolvedProblem, KeyValueStore, LeetCodeTarget
 from ..config import settings as config
@@ -51,35 +51,30 @@ class DatabaseService:
         """
         Log a newly solved problem if it's the first time ever for this user.
         Returns True if it's a new unique solve, False otherwise.
+
+        The insert relies on the composite primary key (platform, problem_id)
+        for uniqueness, making the check-and-insert atomic even under
+        concurrent jobs.
         """
         solve_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
         
         try:
             with self.get_session() as session:
-                # Check if the problem already exists
-                existing = session.query(SolvedProblem).filter(
-                    and_(
-                        SolvedProblem.platform == platform,
-                        SolvedProblem.problem_id == problem_id
-                    )
-                ).first()
-                
-                if existing:
-                    return False  # Already solved before
-                
-                # Create new solved problem record
-                new_solve = SolvedProblem(
+                session.add(SolvedProblem(
                     platform=platform,
                     problem_id=problem_id,
                     first_solve_date=solve_date,
                     rating=str(rating)
-                )
-                session.add(new_solve)
+                ))
                 session.commit()
                 
-                logging.info(f"Logged new ALL-TIME unique solve: {platform} - {problem_id}")
-                return True
+            logging.info(f"Logged new ALL-TIME unique solve: {platform} - {problem_id}")
+            return True
                 
+        except IntegrityError:
+            # Composite PK (platform, problem_id) violated: already solved before
+            logging.info(f"Skipping duplicate solve: {platform} - {problem_id}")
+            return False
         except SQLAlchemyError as e:
             logging.error(f"Error logging solved problem: {e}")
             return False
