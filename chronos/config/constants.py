@@ -6,6 +6,3 @@ LEETCODE_API_URL = "https://leetcode.com/graphql"
 LAST_CF_SUBMISSION_ID_KEY = "last_cf_submission_id"
 LAST_LC_TIMESTAMP_KEY = "last_lc_timestamp"
 LAST_LC_BOUNDARY_IDS_KEY = "last_lc_boundary_ids"
-
-# Daily Stats File
-DAILY_STATS_FILE = "daily_stats.json" # For migration 
