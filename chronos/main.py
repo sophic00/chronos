@@ -23,7 +23,7 @@ from .bot.handlers import (
     test_codeforces_submission,
     test_leetcode_submission,
     send_daily_summary,
-    get_daily_summary_message,
+    send_summary,
     error_handler,
     _format_summary_message,
     _build_summary_extras,
@@ -186,61 +186,7 @@ async def post_initialization(application: Application):
         logger.info("--- RUNNING IN TEST MODE ---")
         if config.TEST_MODE_STATS_ONLY:
             logger.info("--- Testing Daily Summary Only ---")
-            if config.SEND_AS_IMAGE:
-                try:
-                    import io
-                    from .bot.image_generator import generate_summary_card
-                    from .data.database import get_daily_stats_from_db
-                    stats = get_daily_stats_from_db()
-                    summary_details, grand_total = _format_summary_message(stats, 'daily')
-                    
-                    if grand_total == 0:
-                        message = "yet another uneventful day."
-                        await application.bot.send_message(
-                            config.CHANNEL_ID,
-                            message,
-                            disable_web_page_preview=True,
-                            parse_mode=ParseMode.MARKDOWN
-                        )
-                    else:
-                        date_str = datetime.now(pytz.timezone(config.TIMEZONE)).date().strftime("%B %d, %Y")
-                        message = (
-                            f"📊 *Daily Coding Report*\n"
-                            f"🗓️ *Date:* {date_str}\n"
-                            f"🚀 *Progress Overview*\n\n"
-                            f"━━━━━━━━━━━━━━━\n\n"
-                            f"{summary_details}\n\n"
-                            f"━━━━━━━━━━━━━━━\n\n"
-                            f"🎯 *Grand Total Solved Today:* {grand_total}"
-                        )
-                        image_bytes = generate_summary_card(
-                            "daily", date_str, stats,
-                            targets=get_leetcode_target('daily'),
-                            extras=_build_summary_extras('daily', datetime.now(pytz.timezone(config.TIMEZONE)).date())
-                        )
-                        await application.bot.send_photo(
-                            chat_id=config.CHANNEL_ID,
-                            photo=io.BytesIO(image_bytes),
-                            caption=message,
-                            parse_mode=ParseMode.MARKDOWN
-                        )
-                except Exception as test_err:
-                    logger.error(f"Failed to send test daily summary image: {test_err}. Falling back to text.", exc_info=True)
-                    message = get_daily_summary_message()
-                    await application.bot.send_message(
-                        config.CHANNEL_ID,
-                        message,
-                        disable_web_page_preview=True,
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-            else:
-                message = get_daily_summary_message()
-                await application.bot.send_message(
-                    config.CHANNEL_ID,
-                    message,
-                    disable_web_page_preview=True,
-                    parse_mode=ParseMode.MARKDOWN
-                )
+            await send_summary(application.bot, "daily", mark_sent=False)
         else:
             await test_codeforces_submission(application)
             await test_leetcode_submission(application)
@@ -277,111 +223,13 @@ async def post_initialization(application: Application):
 async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE, target_date=None):
     """Sends the monthly summary message to the channel."""
     logging.info("Sending monthly summary...")
-    if target_date is None:
-        target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
-    stats = get_monthly_stats_from_db(target_date)
-    summary_details, grand_total = _format_summary_message(stats, 'monthly')
-
-    if grand_total == 0:
-        message = "No problems were solved this month. Let's do better next month! 💪"
-        await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        logging.info("Monthly summary sent (no solves this month).")
-    else:
-        month_year = target_date.strftime("%B %Y")
-        message = (
-            f"📊 *Monthly Progress Report*\n"
-            f"🗓️ *Period:* {month_year}\n"
-            f"🚀 *Progress Overview*\n\n"
-            f"━━━━━━━━━━━━━━━\n\n"
-            f"{summary_details}\n\n"
-            f"━━━━━━━━━━━━━━━\n\n"
-            f"🎯 *Grand Total Solved This Month:* {grand_total}"
-        )
-
-        if config.SEND_AS_IMAGE:
-            try:
-                import io
-                from .bot.image_generator import generate_summary_card
-                image_bytes = generate_summary_card(
-                    "monthly", month_year, stats,
-                    targets=get_leetcode_target('monthly'),
-                    extras=_build_summary_extras('monthly', target_date)
-                )
-                await context.bot.send_photo(
-                    chat_id=config.CHANNEL_ID,
-                    photo=io.BytesIO(image_bytes),
-                    caption=message,
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                logging.info("Monthly summary sent as image.")
-            except Exception as img_err:
-                logging.error(f"Failed to generate/send monthly summary image: {img_err}. Falling back to text.", exc_info=True)
-                await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        else:
-            await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-            logging.info("Monthly summary sent.")
-    
-    from .data.database import set_value
-    first_day_of_month = target_date.replace(day=1)
-    set_value("last_sent_monthly_summary_date", first_day_of_month.isoformat())
+    await send_summary(context.bot, "monthly", target_date)
 
 
 async def send_weekly_summary(context: ContextTypes.DEFAULT_TYPE, target_date=None):
     """Sends the weekly summary message to the channel."""
     logging.info("Sending weekly summary...")
-    if target_date is None:
-        target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
-    stats = get_weekly_stats_from_db(target_date)
-    summary_details, grand_total = _format_summary_message(stats, 'weekly')
-
-    if grand_total == 0:
-        message = "No problems were solved this week. Let's step up next week! 💪"
-        await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        logging.info("Weekly summary sent (no solves this week).")
-    else:
-        # Calculate week range (Monday to Sunday)
-        days_since_monday = target_date.weekday()
-        start_of_week = target_date - timedelta(days=days_since_monday)
-        end_of_week = start_of_week + timedelta(days=6)
-        week_range = f"{start_of_week.strftime('%b %d')} - {end_of_week.strftime('%b %d, %Y')}"
-        
-        message = (
-            f"📊 *Weekly Progress Report*\n"
-            f"🗓️ *Period:* {week_range}\n"
-            f"🚀 *Progress Overview*\n\n"
-            f"━━━━━━━━━━━━━━━\n\n"
-            f"{summary_details}\n\n"
-            f"━━━━━━━━━━━━━━━\n\n"
-            f"🎯 *Grand Total Solved This Week:* {grand_total}"
-        )
-
-        if config.SEND_AS_IMAGE:
-            try:
-                import io
-                from .bot.image_generator import generate_summary_card
-                image_bytes = generate_summary_card(
-                    "weekly", week_range, stats,
-                    targets=get_leetcode_target('weekly'),
-                    extras=_build_summary_extras('weekly', target_date)
-                )
-                await context.bot.send_photo(
-                    chat_id=config.CHANNEL_ID,
-                    photo=io.BytesIO(image_bytes),
-                    caption=message,
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                logging.info("Weekly summary sent as image.")
-            except Exception as img_err:
-                logging.error(f"Failed to generate/send weekly summary image: {img_err}. Falling back to text.", exc_info=True)
-                await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        else:
-            await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-            logging.info("Weekly summary sent.")
-    
-    from .data.database import set_value
-    days_since_monday = target_date.weekday()
-    start_of_week = target_date - timedelta(days=days_since_monday)
-    set_value("last_sent_weekly_summary_date", start_of_week.isoformat())
+    await send_summary(context.bot, "weekly", target_date)
 
 
 async def daily_check_and_send_weekly_summary(context: ContextTypes.DEFAULT_TYPE):

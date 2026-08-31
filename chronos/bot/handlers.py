@@ -188,80 +188,112 @@ def _format_summary_message(stats: dict, target_type: str = None) -> tuple[str, 
     return details, grand_total
 
 
-def get_daily_summary_message(target_date=None) -> str:
-    """Generates the daily summary message content for target_date (or today if None)."""
-    if target_date is None:
-        target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
-    stats = get_daily_stats_from_db(target_date)
-    summary_details, grand_total = _format_summary_message(stats, 'daily')
+_SUMMARY_CONFIG = {
+    "daily": {
+        "db_stats": get_daily_stats_from_db,
+        "title": "Daily Coding Report",
+        "period_label": "Date",
+        "period": lambda d: d.strftime("%B %d, %Y"),
+        "total_label": "Grand Total Solved Today",
+        "none_msg": "yet another uneventful day.",
+        "last_sent_key": "last_sent_daily_summary_date",
+    },
+    "weekly": {
+        "db_stats": get_weekly_stats_from_db,
+        "title": "Weekly Progress Report",
+        "period_label": "Period",
+        "period": lambda d: _week_range(_start_of_week(d)),
+        "total_label": "Grand Total Solved This Week",
+        "none_msg": "No problems were solved this week. Let's step up next week! 💪",
+        "last_sent_key": "last_sent_weekly_summary_date",
+    },
+    "monthly": {
+        "db_stats": get_monthly_stats_from_db,
+        "title": "Monthly Progress Report",
+        "period_label": "Period",
+        "period": lambda d: d.strftime("%B %Y"),
+        "total_label": "Grand Total Solved This Month",
+        "none_msg": "No problems were solved this month. Let's do better next month! 💪",
+        "last_sent_key": "last_sent_monthly_summary_date",
+    },
+}
+
+
+def build_summary_message(kind: str, target_date, stats: dict, recovered: bool = False) -> str:
+    """Formats the full summary text for a daily/weekly/monthly report."""
+    cfg = _SUMMARY_CONFIG[kind]
+    summary_details, grand_total = _format_summary_message(stats, kind)
 
     if grand_total == 0:
-        return "yet another uneventful day."
-    
-    date_str = target_date.strftime("%B %d, %Y")
+        return cfg["none_msg"]
 
+    recovered_tag = " (RECOVERED)" if recovered else ""
     return (
-        f"📊 *Daily Coding Report*\n"
-        f"🗓️ *Date:* {date_str}\n"
+        f"📊 *{cfg['title']}{recovered_tag}*\n"
+        f"🗓️ *{cfg['period_label']}:* {cfg['period'](target_date)}\n"
         f"🚀 *Progress Overview*\n\n"
         f"━━━━━━━━━━━━━━━\n\n"
         f"{summary_details}\n\n"
         f"━━━━━━━━━━━━━━━\n\n"
-        f"🎯 *Grand Total Solved Today:* {grand_total}"
+        f"🎯 *{cfg['total_label']}:* {grand_total}"
     )
+
+
+def _summary_marker_date(kind: str, target_date):
+    """The date persisted after a summary is sent (start of week / month for those kinds)."""
+    if kind == "weekly":
+        return _start_of_week(target_date)
+    if kind == "monthly":
+        return target_date.replace(day=1)
+    return target_date
+
+
+async def send_summary(bot, kind: str, target_date=None, recovered: bool = False, mark_sent: bool = True) -> None:
+    """Builds and sends a daily/weekly/monthly summary to the channel as an
+    image card (with text fallback) or plain text, then records it as sent."""
+    cfg = _SUMMARY_CONFIG[kind]
+    if target_date is None:
+        target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
+
+    stats = cfg["db_stats"](target_date)
+    message = build_summary_message(kind, target_date, stats, recovered=recovered)
+
+    if message != cfg["none_msg"] and config.SEND_AS_IMAGE:
+        try:
+            image_bytes = generate_summary_card(
+                kind, cfg["period"](target_date), stats,
+                targets=get_leetcode_target(kind),
+                extras=_build_summary_extras(kind, target_date)
+            )
+            await bot.send_photo(
+                chat_id=config.CHANNEL_ID,
+                photo=io.BytesIO(image_bytes),
+                caption=message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+            logging.info(f"{kind.capitalize()} summary sent as image.")
+        except Exception as img_err:
+            logging.error(f"Failed to generate/send {kind} summary image: {img_err}. Falling back to text.", exc_info=True)
+            await bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+    else:
+        await bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+        logging.info(f"{kind.capitalize()} summary sent as text.")
+
+    if mark_sent:
+        set_value(cfg["last_sent_key"], _summary_marker_date(kind, target_date).isoformat())
+
+
+def get_daily_summary_message(target_date=None) -> str:
+    """Generates the daily summary message content for target_date (or today if None)."""
+    if target_date is None:
+        target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
+    return build_summary_message("daily", target_date, get_daily_stats_from_db(target_date))
+
 
 async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, target_date=None):
     """Sends the daily summary message to the channel."""
     logging.info("Sending daily summary...")
-    if target_date is None:
-        target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
-        
-    stats = get_daily_stats_from_db(target_date)
-    summary_details, grand_total = _format_summary_message(stats, 'daily')
-    
-    if grand_total == 0:
-        # Fallback to plain text "yet another uneventful day."
-        message = "yet another uneventful day."
-        await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        logging.info("Daily summary sent (no solves today).")
-    else:
-        date_str = target_date.strftime("%B %d, %Y")
-        message = (
-            f"📊 *Daily Coding Report*\n"
-            f"🗓️ *Date:* {date_str}\n"
-            f"🚀 *Progress Overview*\n\n"
-            f"━━━━━━━━━━━━━━━\n\n"
-            f"{summary_details}\n\n"
-            f"━━━━━━━━━━━━━━━\n\n"
-            f"🎯 *Grand Total Solved Today:* {grand_total}"
-        )
-        
-        if config.SEND_AS_IMAGE:
-            try:
-                # Generate summary card
-                image_bytes = generate_summary_card(
-                    "daily", date_str, stats,
-                    targets=get_leetcode_target('daily'),
-                    extras=_build_summary_extras('daily', target_date)
-                )
-                
-                # Send photo
-                await context.bot.send_photo(
-                    chat_id=config.CHANNEL_ID,
-                    photo=io.BytesIO(image_bytes),
-                    caption=message,
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                logging.info("Daily summary sent as image.")
-            except Exception as img_err:
-                logging.error(f"Failed to generate/send daily summary image: {img_err}. Falling back to text.", exc_info=True)
-                await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        else:
-            await context.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-            logging.info("Daily summary sent.")
-            
-    # Track the sent summary date in the database
-    set_value("last_sent_daily_summary_date", target_date.isoformat())
+    await send_summary(context.bot, "daily", target_date)
 
 
 async def test_codeforces_submission(app: Application):
