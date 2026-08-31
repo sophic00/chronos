@@ -2,6 +2,8 @@ import asyncio
 import hashlib
 import io
 import logging
+import secrets
+import string
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -20,12 +22,27 @@ from ..data.database import log_problem_solved
 from ..data.state_manager import get_last_submission_id, save_last_submission_id
 
 
-def generate_api_sig(method_name, **kwargs):
-    rand = "123456"
-    params = "&".join([f"{k}={v}" for k, v in sorted(kwargs.items())])
-    return hashlib.sha512(
-        f"{rand}/{method_name}?{params}#{config.CF_API_SECRET}".encode("utf-8")
+def _signed_params(method_name: str, extra: dict) -> dict:
+    """Builds query params for the Codeforces API.
+
+    When API credentials are configured, params are signed with apiSig using a
+    unique rand per request (as required by the API). Without credentials the
+    call falls back to anonymous access, which works but is rate-limited.
+    """
+    params = dict(extra)
+    if not (config.CF_API_KEY and config.CF_API_SECRET):
+        logging.warning("CF_API_KEY/CF_API_SECRET not configured; calling Codeforces API anonymously.")
+        return params
+
+    rand = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
+    params["apiKey"] = config.CF_API_KEY
+    params["time"] = int(time.time())
+    sorted_params = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
+    api_sig_hash = hashlib.sha512(
+        f"{rand}/{method_name}?{sorted_params}#{config.CF_API_SECRET}".encode("utf-8")
     ).hexdigest()
+    params["apiSig"] = rand + api_sig_hash
+    return params
 
 
 @asynccontextmanager
@@ -42,16 +59,11 @@ async def get_latest_submission_id(client: Optional[httpx.AsyncClient] = None):
     """Fetches the ID of the most recent submission from Codeforces."""
     try:
         method_name = "user.status"
-        params_for_sig = {
+        params = _signed_params(method_name, {
             "handle": config.CF_HANDLE,
             "from": 1,
             "count": 1,
-            "apiKey": config.CF_API_KEY,
-            "time": int(time.time()),
-        }
-        api_sig_hash = generate_api_sig(method_name, **params_for_sig)
-        params = params_for_sig.copy()
-        params["apiSig"] = "123456" + api_sig_hash
+        })
         async with _get_client(client) as active_client:
             response = await active_client.get(
                 constants.CODEFORCES_API_URL + f"/{method_name}", params=params
@@ -78,16 +90,11 @@ async def check_codeforces_submissions(
     logging.info("Checking for new Codeforces submissions...")
     try:
         method_name = "user.status"
-        params_for_sig = {
+        params = _signed_params(method_name, {
             "handle": config.CF_HANDLE,
             "from": 1,
             "count": 20,
-            "apiKey": config.CF_API_KEY,
-            "time": int(time.time()),
-        }
-        api_sig_hash = generate_api_sig(method_name, **params_for_sig)
-        params = params_for_sig.copy()
-        params["apiSig"] = "123456" + api_sig_hash
+        })
         # Use async httpx and support reusable client
         async with _get_client(client) as active_client:
             response = await active_client.get(

@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from functools import wraps
 import calendar
 import logging
-import time as time_module
 import pytz
 import io
 
@@ -290,18 +289,13 @@ async def test_codeforces_submission(app: Application):
     logging.info("--- Testing Codeforces Submission ---")
     try:
         method_name = "user.status"
-        params_for_sig = {
+        # Lazy import to avoid circular dependency
+        from ..integrations.codeforces import _signed_params
+        params = _signed_params(method_name, {
             "handle": config.CF_HANDLE,
             "from": 1,
             "count": 1,
-            "apiKey": config.CF_API_KEY,
-            "time": int(time_module.time()),
-        }
-        # Lazy import to avoid circular dependency
-        from ..integrations.codeforces import generate_api_sig
-        api_sig_hash = generate_api_sig(method_name, **params_for_sig)
-        params = params_for_sig.copy()
-        params["apiSig"] = "123456" + api_sig_hash
+        })
         
         # Use async httpx for non-blocking requests
         async with httpx.AsyncClient(timeout=30.0) as client:

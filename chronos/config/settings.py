@@ -1,3 +1,4 @@
+import logging
 import os
 from dotenv import load_dotenv
 
@@ -68,6 +69,7 @@ def validate_settings() -> None:
     Runs on bot startup.
     """
     errors = []
+    warnings = []
     
     if not BOT_TOKEN:
         errors.append("BOT_TOKEN is missing or empty.")
@@ -85,7 +87,22 @@ def validate_settings() -> None:
 
     if OWNER_USER_ID_RAW and OWNER_USER_ID is None:
         errors.append(f"OWNER_USER_ID must be a valid integer, got '{OWNER_USER_ID_RAW}'.")
+
+    # Optional credentials: degrade gracefully, but say so loudly.
+    if not (CF_API_KEY and CF_API_SECRET):
+        warnings.append(
+            "CF_API_KEY/CF_API_SECRET not set; Codeforces API will be queried "
+            "anonymously (subject to tighter rate limits)."
+        )
+    if not (LEETCODE_SESSION and CSRF_TOKEN):
+        warnings.append(
+            "LEETCODE_SESSION/CSRF_TOKEN not set; LeetCode queries will run "
+            "without authentication (some endpoints may fail or be rate-limited)."
+        )
         
+    for warning in warnings:
+        logging.warning(f"Config: {warning}")
+    
     if errors:
         raise ValueError("Configuration validation failed:\n" + "\n".join(f"- {err}" for err in errors))
 
