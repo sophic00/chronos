@@ -1,0 +1,24 @@
+# Secrets & local state — must never be baked into the image
+.env
+.env.*
+*.db
+*.sqlite3
+data/*.db
+data/*.json
+
+# VCS & tooling
+.git/
+.jj/
+.github/
+.gitignore
+.pytest_cache/
+.venv/
+uv.lock
+__pycache__/
+*.py[oc]
+
+# Not needed at runtime
+README.md
+Dockerfile
+deploy.sh
+scratch/
