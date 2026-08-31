@@ -45,6 +45,18 @@ async def _get_client(client: Optional[httpx.AsyncClient] = None):
         async with httpx.AsyncClient(timeout=30.0) as new_client:
             yield new_client
 
+async def _graphql(query: str, variables: dict, client: Optional[httpx.AsyncClient] = None) -> dict:
+    """Executes a GraphQL request against the LeetCode API and returns the JSON response."""
+    async with _get_client(client) as active_client:
+        response = await active_client.post(
+            constants.LEETCODE_API_URL,
+            json={"query": query, "variables": variables},
+            cookies=get_leetcode_cookies(),
+            headers=get_leetcode_headers(),
+        )
+        response.raise_for_status()
+        return response.json()
+
 async def get_latest_leetcode_submission_timestamp(client: Optional[httpx.AsyncClient] = None):
     graphql_query = {
         "query": """
@@ -59,21 +71,16 @@ async def get_latest_leetcode_submission_timestamp(client: Optional[httpx.AsyncC
             "limit": 1
         }
     }
-    cookies = get_leetcode_cookies()
-    headers = get_leetcode_headers()
-    async with _get_client(client) as active_client:
-        try:
-            response = await active_client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            if "errors" in data:
-                logging.error(f"LeetCode API error on init: {data['errors']}")
-                return 0
-            submissions = data.get("data", {}).get("recentAcSubmissionList", [])
-            if submissions:
-                return int(submissions[0]["timestamp"])
-        except httpx.RequestError as e:
-            logging.error(f"An error occurred during initial LeetCode submission fetch: {e}")
+    try:
+        data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
+        if "errors" in data:
+            logging.error(f"LeetCode API error on init: {data['errors']}")
+            return 0
+        submissions = data.get("data", {}).get("recentAcSubmissionList", [])
+        if submissions:
+            return int(submissions[0]["timestamp"])
+    except httpx.RequestError as e:
+        logging.error(f"An error occurred during initial LeetCode submission fetch: {e}")
     return 0
 
 async def get_leetcode_submission_details(submission_id: int, client: Optional[httpx.AsyncClient] = None):
@@ -90,19 +97,14 @@ async def get_leetcode_submission_details(submission_id: int, client: Optional[h
         """,
         "variables": {"submissionId": submission_id},
     }
-    cookies = get_leetcode_cookies()
-    headers = get_leetcode_headers()
-    async with _get_client(client) as active_client:
-        try:
-            response = await active_client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            if "errors" in data:
-                logging.error(f"LeetCode API error on submission detail fetch: {data['errors']}")
-                return None
-            return data.get("data", {}).get("submissionDetails")
-        except httpx.RequestError as e:
-            logging.error(f"An error occurred during LeetCode submission detail fetch: {e}")
+    try:
+        data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
+        if "errors" in data:
+            logging.error(f"LeetCode API error on submission detail fetch: {data['errors']}")
+            return None
+        return data.get("data", {}).get("submissionDetails")
+    except httpx.RequestError as e:
+        logging.error(f"An error occurred during LeetCode submission detail fetch: {e}")
     return None
 
 async def get_leetcode_problem_difficulty(title_slug: str, client: Optional[httpx.AsyncClient] = None):
@@ -116,19 +118,14 @@ async def get_leetcode_problem_difficulty(title_slug: str, client: Optional[http
         """,
         "variables": {"titleSlug": title_slug},
     }
-    cookies = get_leetcode_cookies()
-    headers = get_leetcode_headers()
-    async with _get_client(client) as active_client:
-        try:
-            response = await active_client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            if "errors" in data:
-                logging.error(f"LeetCode API error on problem difficulty fetch: {data['errors']}")
-                return None
-            return data.get("data", {}).get("question", {}).get("difficulty")
-        except httpx.RequestError as e:
-            logging.error(f"An error occurred during LeetCode problem difficulty fetch: {e}")
+    try:
+        data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
+        if "errors" in data:
+            logging.error(f"LeetCode API error on problem difficulty fetch: {data['errors']}")
+            return None
+        return data.get("data", {}).get("question", {}).get("difficulty")
+    except httpx.RequestError as e:
+        logging.error(f"An error occurred during LeetCode problem difficulty fetch: {e}")
     return None
 
 async def get_submission_code(submission_id: int, client: Optional[httpx.AsyncClient] = None) -> str:
@@ -145,20 +142,15 @@ async def get_submission_code(submission_id: int, client: Optional[httpx.AsyncCl
             "submissionId": submission_id
         }
     }
-    cookies = get_leetcode_cookies()
-    headers = get_leetcode_headers()
-    async with _get_client(client) as active_client:
-        try:
-            response = await active_client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            if "errors" in data:
-                logging.error(f"LeetCode API error getting submission code: {data['errors']}")
-                return ""
-            return data.get("data", {}).get("submissionDetails", {}).get("code", "")
-        except httpx.RequestError as e:
-            logging.error(f"Error getting submission code: {e}")
+    try:
+        data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
+        if "errors" in data:
+            logging.error(f"LeetCode API error getting submission code: {data['errors']}")
             return ""
+        return data.get("data", {}).get("submissionDetails", {}).get("code", "")
+    except httpx.RequestError as e:
+        logging.error(f"Error getting submission code: {e}")
+        return ""
 
 
 def parse_submission_code(code: str) -> str:
@@ -220,14 +212,10 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
             "limit": 30
         }
     }
-    cookies = get_leetcode_cookies()
-    headers = get_leetcode_headers()
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(constants.LEETCODE_API_URL, json=graphql_query, cookies=cookies, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-        
+            data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
+
             if "errors" in data:
                 logging.error(f"LeetCode API returned an error: {data['errors']}")
                 return
