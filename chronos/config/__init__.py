@@ -2,5 +2,6 @@
 Configuration module for Chronos bot.
 """
 
-from . import settings
-from . import constants 
+from . import constants, settings
+
+__all__ = ["constants", "settings"]

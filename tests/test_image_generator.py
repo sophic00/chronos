@@ -1,10 +1,9 @@
 import io
-import pytest
+
 from PIL import Image
 
 from chronos.bot.image_generator import generate_solve_card, generate_summary_card
-from chronos.data.database import set_leetcode_target, get_leetcode_target
-
+from chronos.data.database import get_leetcode_target, set_leetcode_target
 
 SOLVE_SIZE = (1600, 700)
 SUMMARY_SIZE = (1600, 820)

@@ -1,5 +1,6 @@
-import pytest
 import os
+
+import pytest
 
 # Override environment variables for isolated testing before importing chronos modules
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -10,7 +11,8 @@ os.environ["LEETCODE_USERNAME"] = "mock_lc_username"
 os.environ["TIMEZONE"] = "UTC"
 
 from chronos.config import settings
-from chronos.data.database import db_service, Base
+from chronos.data.database import Base, db_service
+
 
 @pytest.fixture(scope="session", autouse=True)
 def init_test_settings():

@@ -1,5 +1,6 @@
-from .database import get_value, set_value
 from ..config import constants
+from .database import get_value, set_value
+
 
 def get_last_submission_id():
     value = get_value(constants.LAST_CF_SUBMISSION_ID_KEY, "0")

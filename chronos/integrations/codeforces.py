@@ -7,7 +7,6 @@ import string
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Optional
 
 import httpx
 import pytz
@@ -15,7 +14,7 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from ..bot.image_generator import generate_solve_card
-from ..bot.messaging import format_new_solve_message, format_bytes, prettify_language, escape_md
+from ..bot.messaging import escape_md, format_bytes, format_new_solve_message, prettify_language
 from ..config import constants
 from ..config import settings as config
 from ..data.database import log_problem_solved
@@ -39,14 +38,14 @@ def _signed_params(method_name: str, extra: dict) -> dict:
     params["time"] = int(time.time())
     sorted_params = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
     api_sig_hash = hashlib.sha512(
-        f"{rand}/{method_name}?{sorted_params}#{config.CF_API_SECRET}".encode("utf-8")
+        f"{rand}/{method_name}?{sorted_params}#{config.CF_API_SECRET}".encode()
     ).hexdigest()
     params["apiSig"] = rand + api_sig_hash
     return params
 
 
 @asynccontextmanager
-async def _get_client(client: Optional[httpx.AsyncClient] = None):
+async def _get_client(client: httpx.AsyncClient | None = None):
     """Helper to reuse an existing AsyncClient or yield a newly created one."""
     if isinstance(client, httpx.AsyncClient):
         yield client
@@ -55,7 +54,7 @@ async def _get_client(client: Optional[httpx.AsyncClient] = None):
             yield new_client
 
 
-def _shared_client(context: ContextTypes.DEFAULT_TYPE) -> Optional[httpx.AsyncClient]:
+def _shared_client(context: ContextTypes.DEFAULT_TYPE) -> httpx.AsyncClient | None:
     """Returns the long-lived HTTP client stashed in bot_data, if available."""
     bot_data = getattr(getattr(context, "application", None), "bot_data", None)
     if isinstance(bot_data, dict):
@@ -63,7 +62,7 @@ def _shared_client(context: ContextTypes.DEFAULT_TYPE) -> Optional[httpx.AsyncCl
     return None
 
 
-async def get_latest_submission_id(client: Optional[httpx.AsyncClient] = None):
+async def get_latest_submission_id(client: httpx.AsyncClient | None = None):
     """Fetches the ID of the most recent submission from Codeforces."""
     try:
         method_name = "user.status"
@@ -92,7 +91,7 @@ async def get_latest_submission_id(client: Optional[httpx.AsyncClient] = None):
 
 
 async def check_codeforces_submissions(
-    context: ContextTypes.DEFAULT_TYPE, client: Optional[httpx.AsyncClient] = None
+    context: ContextTypes.DEFAULT_TYPE, client: httpx.AsyncClient | None = None
 ):
     """Checks for new successful Codeforces submissions and sends notifications."""
     logging.info("Checking for new Codeforces submissions...")

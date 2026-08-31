@@ -1,23 +1,40 @@
 import asyncio
+import calendar
+import io
+import logging
 from datetime import datetime, timedelta
 from functools import wraps
-import calendar
-import logging
-import pytz
-import io
 
 import httpx
+import pytz
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, filters
 from telegram.constants import ParseMode
 from telegram.error import Conflict
+from telegram.ext import Application, CommandHandler, ContextTypes, filters
 
-from ..config import settings as config
 from ..config import constants
-from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_past_day_stats_from_db, get_past_week_stats_from_db, set_leetcode_target, get_leetcode_target, set_value, get_daily_breakdown_from_db, get_current_streak
-from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers, get_leetcode_problem_difficulty
+from ..config import settings as config
+from ..data.database import (
+    get_current_streak,
+    get_daily_breakdown_from_db,
+    get_daily_stats_from_db,
+    get_leetcode_target,
+    get_monthly_stats_from_db,
+    get_past_day_stats_from_db,
+    get_past_week_stats_from_db,
+    get_weekly_stats_from_db,
+    set_leetcode_target,
+    set_value,
+)
+from ..integrations.leetcode import (
+    get_leetcode_cookies,
+    get_leetcode_headers,
+    get_leetcode_problem_difficulty,
+    get_leetcode_submission_details,
+)
 from .image_generator import generate_solve_card, generate_summary_card
-from .messaging import format_bytes, prettify_language, escape_md, cf_rating_bands
+from .messaging import cf_rating_bands, escape_md, format_bytes, prettify_language
+
 
 def _stats_total(stats: dict) -> int:
     """Total solve count across all platforms in a stats dictionary."""

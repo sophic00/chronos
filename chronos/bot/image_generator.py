@@ -1,7 +1,8 @@
-import os
 import io
-import urllib.request
 import logging
+import os
+import urllib.request
+
 from PIL import Image, ImageDraw, ImageFont
 
 from .messaging import cf_rating_bands

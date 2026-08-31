@@ -1,33 +1,33 @@
 import asyncio
+import calendar
+import logging
 import os
 import sys
-import logging
-from datetime import time, datetime, timedelta, date
-import calendar
+from datetime import date, datetime, time, timedelta
 
 import httpx
 import pytz
 from telegram.ext import Application, ContextTypes
 
-from .config import settings as config
-from .data.database import init_db, get_daily_stats_from_db, get_value, set_value
-from .data.state_manager import (
-    get_last_submission_id,
-    save_last_submission_id,
-    get_last_leetcode_timestamp,
-    save_last_leetcode_timestamp
-)
-from .integrations.codeforces import get_latest_submission_id, check_codeforces_submissions
-from .integrations.leetcode import get_latest_leetcode_submission_timestamp, check_leetcode_submissions
-from .bot.image_generator import ensure_assets
 from .bot.handlers import (
+    error_handler,
     register_handlers,
-    test_codeforces_submission,
-    test_leetcode_submission,
     send_daily_summary,
     send_summary,
-    error_handler,
+    test_codeforces_submission,
+    test_leetcode_submission,
 )
+from .bot.image_generator import ensure_assets
+from .config import settings as config
+from .data.database import get_daily_stats_from_db, get_value, init_db, set_value
+from .data.state_manager import (
+    get_last_leetcode_timestamp,
+    get_last_submission_id,
+    save_last_leetcode_timestamp,
+    save_last_submission_id,
+)
+from .integrations.codeforces import check_codeforces_submissions, get_latest_submission_id
+from .integrations.leetcode import check_leetcode_submissions, get_latest_leetcode_submission_timestamp
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

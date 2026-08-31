@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 
 from telegram.helpers import escape_markdown
 
@@ -28,7 +27,7 @@ _LANGUAGE_NAMES = {
     "bash": "Bash",
 }
 
-def prettify_language(language: Optional[str]) -> str:
+def prettify_language(language: str | None) -> str:
     """Human-friendly language names: 'cpp' -> 'C++', 'C++23 (GCC 14-64, msys2)' -> 'C++23'."""
     if not language:
         return "N/A"
@@ -92,12 +91,12 @@ def format_new_solve_message(
     platform: str,
     problem_name: str,
     problem_url: str,
-    difficulty: Optional[str],
+    difficulty: str | None,
     language: str,
-    runtime: Optional[str],
-    memory: Optional[str],
-    code: Optional[str] = None,
-    language_ext: Optional[str] = None
+    runtime: str | None,
+    memory: str | None,
+    code: str | None = None,
+    language_ext: str | None = None
 ) -> str:
 
     if platform.lower() == "leetcode":

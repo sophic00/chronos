@@ -1,8 +1,10 @@
 """SQLAlchemy models for the database."""
 
-from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Date, DateTime, Text, CheckConstraint
+from datetime import UTC, datetime
+
+from sqlalchemy import CheckConstraint, Column, Date, DateTime, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase
+
 
 class Base(DeclarativeBase):
     pass
@@ -42,8 +44,8 @@ class LeetCodeTarget(Base):
     easy_target = Column(Integer, default=0)
     medium_target = Column(Integer, default=0)
     hard_target = Column(Integer, default=0)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), onupdate=lambda: datetime.now(UTC).replace(tzinfo=None))
     
     __table_args__ = (
         CheckConstraint("target_type IN ('daily', 'weekly', 'monthly')", name='check_target_type'),

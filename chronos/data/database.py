@@ -1,18 +1,17 @@
 """Database operations using SQLAlchemy ORM."""
 
-import logging
-from datetime import datetime, timedelta, date, timezone
 import calendar
-from typing import Dict, Optional, List
-import pytz
+import logging
 from contextlib import contextmanager
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import create_engine, func, and_, inspect, text
-from sqlalchemy.orm import sessionmaker, Session
+import pytz
+from sqlalchemy import and_, create_engine, func, inspect, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
 
-from .models import Base, SolvedProblem, KeyValueStore, LeetCodeTarget
 from ..config import settings as config
+from .models import Base, KeyValueStore, LeetCodeTarget, SolvedProblem
 
 
 class DatabaseService:
@@ -110,7 +109,7 @@ class DatabaseService:
             logging.error(f"Error checking if problem is solved: {e}")
             return False
     
-    def get_daily_stats(self, target_date: Optional[date] = None) -> Dict[str, Dict[str, int]]:
+    def get_daily_stats(self, target_date: date | None = None) -> dict[str, dict[str, int]]:
         """Get the count of unique problems first solved on target_date (or today if None), grouped by platform and rating."""
         if target_date is None:
             target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
@@ -139,7 +138,7 @@ class DatabaseService:
         
         return stats
     
-    def get_monthly_stats(self, target_date: Optional[date] = None) -> Dict[str, Dict[str, int]]:
+    def get_monthly_stats(self, target_date: date | None = None) -> dict[str, dict[str, int]]:
         """Get the count of unique problems first solved in the month of target_date (or current month if None), grouped by platform and rating."""
         if target_date is None:
             target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
@@ -175,7 +174,7 @@ class DatabaseService:
         
         return stats
     
-    def get_weekly_stats(self, target_date: Optional[date] = None) -> Dict[str, Dict[str, int]]:
+    def get_weekly_stats(self, target_date: date | None = None) -> dict[str, dict[str, int]]:
         """Get the count of unique problems first solved in the week of target_date (Monday to Sunday) (or current week if None), grouped by platform and rating."""
         if target_date is None:
             target_date = datetime.now(pytz.timezone(config.TIMEZONE)).date()
@@ -211,7 +210,7 @@ class DatabaseService:
         
         return stats
     
-    def get_past_day_stats(self) -> Dict[str, Dict[str, int]]:
+    def get_past_day_stats(self) -> dict[str, dict[str, int]]:
         """Get the count of unique problems first solved yesterday, grouped by platform and rating."""
         current_date = datetime.now(pytz.timezone(config.TIMEZONE))
         yesterday = (current_date - timedelta(days=1)).date()
@@ -240,7 +239,7 @@ class DatabaseService:
         
         return stats
     
-    def get_past_week_stats(self) -> Dict[str, Dict[str, int]]:
+    def get_past_week_stats(self) -> dict[str, dict[str, int]]:
         """Get the count of unique problems first solved in the previous week (Monday to Sunday), grouped by platform and rating."""
         current_date = datetime.now(pytz.timezone(config.TIMEZONE))
         # Calculate the start of the current week (Monday)
@@ -277,7 +276,7 @@ class DatabaseService:
         
         return stats
     
-    def get_value(self, key: str, default: Optional[str] = None) -> Optional[str]:
+    def get_value(self, key: str, default: str | None = None) -> str | None:
         """Get a value from the key-value store."""
         try:
             with self.get_session() as session:
@@ -319,7 +318,7 @@ class DatabaseService:
                     target.easy_target = easy
                     target.medium_target = medium
                     target.hard_target = hard
-                    target.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    target.updated_at = datetime.now(UTC).replace(tzinfo=None)
                 else:
                     target = LeetCodeTarget(
                         target_type=target_type,
@@ -337,7 +336,7 @@ class DatabaseService:
             logging.error(f"Error setting {target_type} target: {e}")
             return False
     
-    def get_leetcode_target(self, target_type: str) -> Dict[str, int]:
+    def get_leetcode_target(self, target_type: str) -> dict[str, int]:
         """Get LeetCode targets for daily, weekly, or monthly."""
         if target_type not in ['daily', 'weekly', 'monthly']:
             raise ValueError("target_type must be 'daily', 'weekly', or 'monthly'")
@@ -361,7 +360,7 @@ class DatabaseService:
             logging.error(f"Error getting {target_type} target: {e}")
             return {'easy': 0, 'medium': 0, 'hard': 0}
 
-    def get_daily_breakdown(self, start_date: date, end_date: date) -> Dict[date, int]:
+    def get_daily_breakdown(self, start_date: date, end_date: date) -> dict[date, int]:
         """Get the count of unique problems first solved per day in [start_date, end_date]."""
         breakdown = {}
         try:

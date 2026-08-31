@@ -1,9 +1,12 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from telegram import Update
 from telegram.ext import ContextTypes
-from chronos.config import settings
+
 from chronos.bot.handlers import restrict_to_owner
+from chronos.config import settings
+
 
 @pytest.mark.asyncio
 async def test_restrict_to_owner_no_config(mocker):

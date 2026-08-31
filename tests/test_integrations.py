@@ -1,8 +1,11 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from chronos.config import settings
-from chronos.integrations.leetcode import check_leetcode_submissions
 from chronos.integrations.codeforces import check_codeforces_submissions
+from chronos.integrations.leetcode import check_leetcode_submissions
+
 
 @pytest.mark.asyncio
 async def test_leetcode_spam_prevention(mocker):

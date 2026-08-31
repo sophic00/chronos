@@ -1,16 +1,19 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from telegram import Update
 from telegram.ext import ContextTypes
-from chronos.config import settings
+
 from chronos.bot.handlers import (
-    stats_handler,
+    help_handler,
     monthly_stats_handler,
-    weekly_stats_handler,
     past_day_stats_handler,
     past_week_stats_handler,
-    help_handler
+    stats_handler,
+    weekly_stats_handler,
 )
+from chronos.config import settings
+
 
 @pytest.mark.asyncio
 async def test_stats_handler_send_as_image(mocker):

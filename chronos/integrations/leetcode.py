@@ -1,26 +1,26 @@
-import io
-import httpx
 import asyncio
+import io
 import logging
-from datetime import datetime
-from typing import Optional
 from contextlib import asynccontextmanager
+from datetime import datetime
 
+import httpx
 import pytz
-from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
+from telegram.ext import ContextTypes
 
-from ..config import settings as config
-from ..config import constants
-from ..data.database import log_problem_solved, is_problem_solved
-from ..data.state_manager import (
-    get_last_leetcode_timestamp,
-    save_last_leetcode_timestamp,
-    get_last_leetcode_boundary_ids,
-    save_last_leetcode_boundary_ids,
-)
-from ..bot.messaging import format_new_solve_message, format_bytes, prettify_language, escape_md
 from ..bot.image_generator import generate_solve_card
+from ..bot.messaging import escape_md, format_bytes, format_new_solve_message, prettify_language
+from ..config import constants
+from ..config import settings as config
+from ..data.database import is_problem_solved, log_problem_solved
+from ..data.state_manager import (
+    get_last_leetcode_boundary_ids,
+    get_last_leetcode_timestamp,
+    save_last_leetcode_boundary_ids,
+    save_last_leetcode_timestamp,
+)
+
 
 def get_leetcode_headers():
     return {
@@ -37,7 +37,7 @@ def get_leetcode_cookies():
     }
 
 @asynccontextmanager
-async def _get_client(client: Optional[httpx.AsyncClient] = None):
+async def _get_client(client: httpx.AsyncClient | None = None):
     """Helper to reuse an existing AsyncClient or yield a newly created one."""
     if isinstance(client, httpx.AsyncClient):
         yield client
@@ -46,14 +46,14 @@ async def _get_client(client: Optional[httpx.AsyncClient] = None):
             yield new_client
 
 
-def _shared_client(context) -> Optional[httpx.AsyncClient]:
+def _shared_client(context) -> httpx.AsyncClient | None:
     """Returns the long-lived HTTP client stashed in bot_data, if available."""
     bot_data = getattr(getattr(context, "application", None), "bot_data", None)
     if isinstance(bot_data, dict):
         return bot_data.get("http_client")
     return None
 
-async def _graphql(query: str, variables: dict, client: Optional[httpx.AsyncClient] = None) -> dict:
+async def _graphql(query: str, variables: dict, client: httpx.AsyncClient | None = None) -> dict:
     """Executes a GraphQL request against the LeetCode API and returns the JSON response."""
     async with _get_client(client) as active_client:
         response = await active_client.post(
@@ -65,7 +65,7 @@ async def _graphql(query: str, variables: dict, client: Optional[httpx.AsyncClie
         response.raise_for_status()
         return response.json()
 
-async def get_latest_leetcode_submission_timestamp(client: Optional[httpx.AsyncClient] = None):
+async def get_latest_leetcode_submission_timestamp(client: httpx.AsyncClient | None = None):
     graphql_query = {
         "query": """
             query recentAcSubmissions($username: String!, $limit: Int!) {
@@ -91,7 +91,7 @@ async def get_latest_leetcode_submission_timestamp(client: Optional[httpx.AsyncC
         logging.error(f"An error occurred during initial LeetCode submission fetch: {e}")
     return 0
 
-async def get_leetcode_submission_details(submission_id: int, client: Optional[httpx.AsyncClient] = None):
+async def get_leetcode_submission_details(submission_id: int, client: httpx.AsyncClient | None = None):
     graphql_query = {
         "query": """
             query submissionDetails($submissionId: Int!) {
@@ -115,7 +115,7 @@ async def get_leetcode_submission_details(submission_id: int, client: Optional[h
         logging.error(f"An error occurred during LeetCode submission detail fetch: {e}")
     return None
 
-async def get_leetcode_problem_difficulty(title_slug: str, client: Optional[httpx.AsyncClient] = None):
+async def get_leetcode_problem_difficulty(title_slug: str, client: httpx.AsyncClient | None = None):
     graphql_query = {
         "query": """
             query questionData($titleSlug: String!) {
@@ -136,7 +136,7 @@ async def get_leetcode_problem_difficulty(title_slug: str, client: Optional[http
         logging.error(f"An error occurred during LeetCode problem difficulty fetch: {e}")
     return None
 
-async def get_submission_code(submission_id: int, client: Optional[httpx.AsyncClient] = None) -> str:
+async def get_submission_code(submission_id: int, client: httpx.AsyncClient | None = None) -> str:
     """Gets the code for a LeetCode submission."""
     graphql_query = {
         "query": """

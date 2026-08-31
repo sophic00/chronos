@@ -1,5 +1,7 @@
 from datetime import date, timedelta
+
 from chronos.data.database import db_service
+
 
 def test_log_problem_solved():
     """Verify logging unique solves and rejecting duplicate solves."""
