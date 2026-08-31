@@ -6,10 +6,9 @@ import calendar
 
 import pytz
 from telegram.ext import Application, ContextTypes
-from telegram.constants import ParseMode
 
 from .config import settings as config
-from .data.database import init_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_value, set_value, get_leetcode_target
+from .data.database import init_db, get_daily_stats_from_db, get_value, set_value
 from .data.state_manager import (
     get_last_submission_id,
     save_last_submission_id,
@@ -25,9 +24,6 @@ from .bot.handlers import (
     send_daily_summary,
     send_summary,
     error_handler,
-    _format_summary_message,
-    _build_summary_extras,
-    weekly_stats_handler,
 )
 
 logging.basicConfig(
@@ -58,25 +54,18 @@ async def recover_missed_summaries(application: Application) -> None:
             last_daily = date.fromisoformat(last_daily_raw)
             if last_daily < yesterday:
                 logger.warning(f"Detected missed daily summary. Last sent: {last_daily_raw}, expected: {yesterday.isoformat()}. Recovering...")
-                message = get_daily_summary_message(yesterday)
-                if message != "yet another uneventful day.":
-                    await application.bot.send_message(
-                        config.CHANNEL_ID,
-                        message,
-                        disable_web_page_preview=True,
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-                set_value("last_sent_daily_summary_date", yesterday.isoformat())
+                # Empty days are not broadcast (consistent with the scheduled sender)
+                if get_daily_stats_from_db(yesterday):
+                    await send_summary(application.bot, "daily", yesterday, recovered=True)
+                else:
+                    set_value("last_sent_daily_summary_date", yesterday.isoformat())
                 logger.info(f"Successfully recovered daily summary for {yesterday.isoformat()}")
         except ValueError:
             logger.error(f"Invalid date format in DB for last_sent_daily_summary_date: {last_daily_raw}")
             set_value("last_sent_daily_summary_date", yesterday.isoformat())
 
     # --- Weekly Summary Recovery ---
-    days_since_monday = now.weekday()
-    start_of_current_week = now - timedelta(days=days_since_monday)
-    start_of_previous_week = start_of_current_week - timedelta(days=7)
-    
+    start_of_previous_week = _start_of_week(now) - timedelta(days=7)
     last_weekly_raw = get_value("last_sent_weekly_summary_date")
     if not last_weekly_raw:
         # First run: initialize baseline to previous week to avoid spamming
@@ -87,44 +76,14 @@ async def recover_missed_summaries(application: Application) -> None:
             last_weekly = date.fromisoformat(last_weekly_raw)
             if last_weekly < start_of_previous_week:
                 logger.warning(f"Detected missed weekly summary. Last sent: {last_weekly_raw}, expected: {start_of_previous_week.isoformat()}. Recovering...")
-                stats = get_weekly_stats_from_db(start_of_previous_week)
-                summary_details, grand_total = _format_summary_message(stats, 'weekly')
-                
-                end_of_previous_week = start_of_previous_week + timedelta(days=6)
-                week_range = f"{start_of_previous_week.strftime('%b %d')} - {end_of_previous_week.strftime('%b %d, %Y')}"
-                
-                if grand_total == 0:
-                    message = f"No problems were solved during the week {week_range}. Let's step up next week! 💪"
-                else:
-                    message = (
-                        f"📊 *Weekly Progress Report (RECOVERED)*\n"
-                        f"🗓️ *Period:* {week_range}\n"
-                        f"🚀 *Progress Overview*\n\n"
-                        f"━━━━━━━━━━━━━━━\n\n"
-                        f"{summary_details}\n\n"
-                        f"━━━━━━━━━━━━━━━\n\n"
-                        f"🎯 *Grand Total Solved Last Week:* {grand_total}"
-                    )
-                
-                await application.bot.send_message(
-                    config.CHANNEL_ID,
-                    message,
-                    disable_web_page_preview=True,
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                set_value("last_sent_weekly_summary_date", start_of_previous_week.isoformat())
-                logger.info(f"Successfully recovered weekly summary for {week_range}")
+                await send_summary(application.bot, "weekly", start_of_previous_week, recovered=True)
+                logger.info(f"Successfully recovered weekly summary for {start_of_previous_week.isoformat()}")
         except ValueError:
             logger.error(f"Invalid date format in DB for last_sent_weekly_summary_date: {last_weekly_raw}")
             set_value("last_sent_weekly_summary_date", start_of_previous_week.isoformat())
 
     # --- Monthly Summary Recovery ---
-    first_day_of_current_month = now.replace(day=1)
-    if first_day_of_current_month.month == 1:
-        first_day_of_previous_month = first_day_of_current_month.replace(year=first_day_of_current_month.year - 1, month=12)
-    else:
-        first_day_of_previous_month = first_day_of_current_month.replace(month=first_day_of_current_month.month - 1)
-        
+    first_day_of_previous_month = _first_day_of_previous_month(now)
     last_monthly_raw = get_value("last_sent_monthly_summary_date")
     if not last_monthly_raw:
         set_value("last_sent_monthly_summary_date", first_day_of_previous_month.isoformat())
@@ -134,34 +93,22 @@ async def recover_missed_summaries(application: Application) -> None:
             last_monthly = date.fromisoformat(last_monthly_raw)
             if last_monthly < first_day_of_previous_month:
                 logger.warning(f"Detected missed monthly summary. Last sent: {last_monthly_raw}, expected: {first_day_of_previous_month.isoformat()}. Recovering...")
-                stats = get_monthly_stats_from_db(first_day_of_previous_month)
-                summary_details, grand_total = _format_summary_message(stats, 'monthly')
-                month_year = first_day_of_previous_month.strftime("%B %Y")
-                
-                if grand_total == 0:
-                    message = f"No problems were solved during the month {month_year}. Let's do better this month! 💪"
-                else:
-                    message = (
-                        f"📊 *Monthly Progress Report (RECOVERED)*\n"
-                        f"🗓️ *Period:* {month_year}\n"
-                        f"🚀 *Progress Overview*\n\n"
-                        f"━━━━━━━━━━━━━━━\n\n"
-                        f"{summary_details}\n\n"
-                        f"━━━━━━━━━━━━━━━\n\n"
-                        f"🎯 *Grand Total Solved Last Month:* {grand_total}"
-                    )
-                
-                await application.bot.send_message(
-                    config.CHANNEL_ID,
-                    message,
-                    disable_web_page_preview=True,
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                set_value("last_sent_monthly_summary_date", first_day_of_previous_month.isoformat())
-                logger.info(f"Successfully recovered monthly summary for {month_year}")
+                await send_summary(application.bot, "monthly", first_day_of_previous_month, recovered=True)
+                logger.info(f"Successfully recovered monthly summary for {first_day_of_previous_month.isoformat()}")
         except ValueError:
             logger.error(f"Invalid date format in DB for last_sent_monthly_summary_date: {last_monthly_raw}")
             set_value("last_sent_monthly_summary_date", first_day_of_previous_month.isoformat())
+
+
+def _start_of_week(day: date) -> date:
+    """Monday of the week containing day."""
+    return day - timedelta(days=day.weekday())
+
+
+def _first_day_of_previous_month(day: date) -> date:
+    if day.month == 1:
+        return day.replace(year=day.year - 1, month=12, day=1)
+    return day.replace(month=day.month - 1, day=1)
 
 
 async def post_initialization(application: Application):
