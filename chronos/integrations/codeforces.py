@@ -2,6 +2,8 @@ import asyncio
 import hashlib
 import io
 import logging
+
+logger = logging.getLogger(__name__)
 import secrets
 import string
 import time
@@ -30,7 +32,7 @@ def _signed_params(method_name: str, extra: dict) -> dict:
     """
     params = dict(extra)
     if not (config.CF_API_KEY and config.CF_API_SECRET):
-        logging.warning("CF_API_KEY/CF_API_SECRET not configured; calling Codeforces API anonymously.")
+        logger.warning("CF_API_KEY/CF_API_SECRET not configured; calling Codeforces API anonymously.")
         return params
 
     rand = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
@@ -80,11 +82,11 @@ async def get_latest_submission_id(client: httpx.AsyncClient | None = None):
         if data["status"] == "OK" and data["result"]:
             return data["result"][0]["id"]
         elif data["status"] != "OK":
-            logging.warning(f"Codeforces API error on init: {data.get('comment')}")
+            logger.warning(f"Codeforces API error on init: {data.get('comment')}")
     except httpx.RequestError as e:
-        logging.error(f"An error occurred during initial submission fetch: {e}")
+        logger.error(f"An error occurred during initial submission fetch: {e}")
     except httpx.HTTPStatusError as e:
-        logging.error(
+        logger.error(
             f"Codeforces API returned error status {e.response.status_code} during init: {e}"
         )
     return 0
@@ -94,7 +96,7 @@ async def check_codeforces_submissions(
     context: ContextTypes.DEFAULT_TYPE, client: httpx.AsyncClient | None = None
 ):
     """Checks for new successful Codeforces submissions and sends notifications."""
-    logging.info("Checking for new Codeforces submissions...")
+    logger.info("Checking for new Codeforces submissions...")
     try:
         method_name = "user.status"
         params = _signed_params(method_name, {
@@ -117,7 +119,7 @@ async def check_codeforces_submissions(
             if submissions and last_processed_id == 0:
                 latest_id = submissions[0]["id"]
                 save_last_submission_id(latest_id)
-                logging.warning(
+                logger.warning(
                     f"Codeforces state was uninitialized (ID = 0). "
                     f"Initialized baseline submission ID to {latest_id} without sending notifications."
                 )
@@ -134,7 +136,7 @@ async def check_codeforces_submissions(
             if submissions and last_processed_id != 0:
                 oldest_fetched = min(s["id"] for s in submissions)
                 if oldest_fetched > last_processed_id:
-                    logging.warning(
+                    logger.warning(
                         f"Oldest fetched Codeforces submission ({oldest_fetched}) is newer than the "
                         f"last processed ID ({last_processed_id}); submissions in between may have been missed."
                     )
@@ -190,11 +192,11 @@ async def check_codeforces_submissions(
                                     caption=caption,
                                     parse_mode=ParseMode.MARKDOWN,
                                 )
-                                logging.info(
+                                logger.info(
                                     f"Sent photo notification for new unique problem: CF submission {submission['id']}"
                                 )
                             except Exception as img_err:
-                                logging.error(
+                                logger.error(
                                     f"Failed to generate/send image notification for CF {submission['id']}: {img_err}. Falling back to text.",
                                     exc_info=True,
                                 )
@@ -233,21 +235,21 @@ async def check_codeforces_submissions(
                             1
                         )  # Avoid rate-limiting Telegram on new solves
                     else:
-                        logging.info(
+                        logger.info(
                             f"Skipping notification for already solved problem: CF submission {submission['id']}"
                         )
 
                     # ALWAYS update the last processed ID to mark this submission as seen.
                     save_last_submission_id(submission["id"])
         else:
-            logging.warning(f"Codeforces API returned status: {data.get('comment')}")
+            logger.warning(f"Codeforces API returned status: {data.get('comment')}")
     except httpx.RequestError as e:
-        logging.error(f"An error occurred with Codeforces API: {e}")
+        logger.error(f"An error occurred with Codeforces API: {e}")
     except httpx.HTTPStatusError as e:
-        logging.error(
+        logger.error(
             f"Codeforces API returned error status {e.response.status_code}: {e}"
         )
     except Exception as e:
-        logging.error(
+        logger.error(
             f"An unexpected error occurred in Codeforces check: {e}", exc_info=True
         )

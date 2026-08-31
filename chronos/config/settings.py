@@ -1,4 +1,6 @@
 import logging
+
+logger = logging.getLogger(__name__)
 import os
 
 from dotenv import load_dotenv
@@ -102,7 +104,7 @@ def validate_settings() -> None:
         )
         
     for warning in warnings:
-        logging.warning(f"Config: {warning}")
+        logger.warning(f"Config: {warning}")
     
     if errors:
         raise ValueError("Configuration validation failed:\n" + "\n".join(f"- {err}" for err in errors))

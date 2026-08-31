@@ -2,6 +2,8 @@
 
 import calendar
 import logging
+
+logger = logging.getLogger(__name__)
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 
@@ -32,7 +34,7 @@ class DatabaseService:
             yield session
         except Exception as e:
             session.rollback()
-            logging.error(f"Database session error: {e}")
+            logger.error(f"Database session error: {e}")
             raise
         finally:
             session.close()
@@ -42,9 +44,9 @@ class DatabaseService:
         try:
             Base.metadata.create_all(bind=self.engine)
             self._ensure_indexes()
-            logging.info("Database initialized successfully with ORM.")
+            logger.info("Database initialized successfully with ORM.")
         except SQLAlchemyError as e:
-            logging.error(f"Error initializing database: {e}")
+            logger.error(f"Error initializing database: {e}")
             raise
 
     def _ensure_indexes(self):
@@ -60,7 +62,7 @@ class DatabaseService:
                     "CREATE INDEX ix_solved_problems_first_solve_date "
                     "ON solved_problems (first_solve_date)"
                 ))
-            logging.info("Created index ix_solved_problems_first_solve_date.")
+            logger.info("Created index ix_solved_problems_first_solve_date.")
     
     def log_problem_solved(self, platform: str, problem_id: str, rating: str) -> bool:
         """
@@ -83,15 +85,15 @@ class DatabaseService:
                 ))
                 session.commit()
                 
-            logging.info(f"Logged new ALL-TIME unique solve: {platform} - {problem_id}")
+            logger.info(f"Logged new ALL-TIME unique solve: {platform} - {problem_id}")
             return True
                 
         except IntegrityError:
             # Composite PK (platform, problem_id) violated: already solved before
-            logging.info(f"Skipping duplicate solve: {platform} - {problem_id}")
+            logger.info(f"Skipping duplicate solve: {platform} - {problem_id}")
             return False
         except SQLAlchemyError as e:
-            logging.error(f"Error logging solved problem: {e}")
+            logger.error(f"Error logging solved problem: {e}")
             return False
             
     def is_problem_solved(self, platform: str, problem_id: str) -> bool:
@@ -106,7 +108,7 @@ class DatabaseService:
                 ).first()
                 return existing is not None
         except SQLAlchemyError as e:
-            logging.error(f"Error checking if problem is solved: {e}")
+            logger.error(f"Error checking if problem is solved: {e}")
             return False
     
     def get_daily_stats(self, target_date: date | None = None) -> dict[str, dict[str, int]]:
@@ -134,7 +136,7 @@ class DatabaseService:
                     stats[platform][rating] = count
                     
         except SQLAlchemyError as e:
-            logging.error(f"Error getting daily stats: {e}")
+            logger.error(f"Error getting daily stats: {e}")
         
         return stats
     
@@ -170,7 +172,7 @@ class DatabaseService:
                     stats[platform][rating] = count
                     
         except SQLAlchemyError as e:
-            logging.error(f"Error getting monthly stats: {e}")
+            logger.error(f"Error getting monthly stats: {e}")
         
         return stats
     
@@ -206,7 +208,7 @@ class DatabaseService:
                     stats[platform][rating] = count
                     
         except SQLAlchemyError as e:
-            logging.error(f"Error getting weekly stats: {e}")
+            logger.error(f"Error getting weekly stats: {e}")
         
         return stats
     
@@ -235,7 +237,7 @@ class DatabaseService:
                     stats[platform][rating] = count
                     
         except SQLAlchemyError as e:
-            logging.error(f"Error getting past day stats: {e}")
+            logger.error(f"Error getting past day stats: {e}")
         
         return stats
     
@@ -272,7 +274,7 @@ class DatabaseService:
                     stats[platform][rating] = count
                     
         except SQLAlchemyError as e:
-            logging.error(f"Error getting past week stats: {e}")
+            logger.error(f"Error getting past week stats: {e}")
         
         return stats
     
@@ -283,7 +285,7 @@ class DatabaseService:
                 kv_pair = session.query(KeyValueStore).filter(KeyValueStore.key == key).first()
                 return kv_pair.value if kv_pair else default
         except SQLAlchemyError as e:
-            logging.error(f"Error getting value for key '{key}': {e}")
+            logger.error(f"Error getting value for key '{key}': {e}")
             return default
     
     def set_value(self, key: str, value: str) -> bool:
@@ -300,7 +302,7 @@ class DatabaseService:
                 session.commit()
                 return True
         except SQLAlchemyError as e:
-            logging.error(f"Error setting value for key '{key}': {e}")
+            logger.error(f"Error setting value for key '{key}': {e}")
             return False
     
     def set_leetcode_target(self, target_type: str, easy: int, medium: int, hard: int) -> bool:
@@ -329,11 +331,11 @@ class DatabaseService:
                     session.add(target)
                 
                 session.commit()
-                logging.info(f"Set {target_type} LeetCode target: Easy={easy}, Medium={medium}, Hard={hard}")
+                logger.info(f"Set {target_type} LeetCode target: Easy={easy}, Medium={medium}, Hard={hard}")
                 return True
                 
         except SQLAlchemyError as e:
-            logging.error(f"Error setting {target_type} target: {e}")
+            logger.error(f"Error setting {target_type} target: {e}")
             return False
     
     def get_leetcode_target(self, target_type: str) -> dict[str, int]:
@@ -357,7 +359,7 @@ class DatabaseService:
                     return {'easy': 0, 'medium': 0, 'hard': 0}
                     
         except SQLAlchemyError as e:
-            logging.error(f"Error getting {target_type} target: {e}")
+            logger.error(f"Error getting {target_type} target: {e}")
             return {'easy': 0, 'medium': 0, 'hard': 0}
 
     def get_daily_breakdown(self, start_date: date, end_date: date) -> dict[date, int]:
@@ -381,7 +383,7 @@ class DatabaseService:
                     breakdown[solve_date] = count
 
         except SQLAlchemyError as e:
-            logging.error(f"Error getting daily breakdown: {e}")
+            logger.error(f"Error getting daily breakdown: {e}")
 
         return breakdown
 
@@ -396,7 +398,7 @@ class DatabaseService:
                 rows = session.query(SolvedProblem.first_solve_date).distinct().all()
                 solve_dates = {row[0] for row in rows}
         except SQLAlchemyError as e:
-            logging.error(f"Error getting current streak: {e}")
+            logger.error(f"Error getting current streak: {e}")
             return 0
 
         streak = 0

@@ -186,13 +186,13 @@ async def close_http_client(application: Application) -> None:
 
 async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE, target_date=None):
     """Sends the monthly summary message to the channel."""
-    logging.info("Sending monthly summary...")
+    logger.info("Sending monthly summary...")
     await send_summary(context.bot, "monthly", target_date)
 
 
 async def send_weekly_summary(context: ContextTypes.DEFAULT_TYPE, target_date=None):
     """Sends the weekly summary message to the channel."""
-    logging.info("Sending weekly summary...")
+    logger.info("Sending weekly summary...")
     await send_summary(context.bot, "weekly", target_date)
 
 
@@ -202,7 +202,7 @@ async def daily_check_and_send_weekly_summary(context: ContextTypes.DEFAULT_TYPE
     
     # Sunday is 6 in weekday() (Monday=0, Sunday=6)
     if now.weekday() == 6:
-        logging.info("Today is Sunday, sending weekly summary...")
+        logger.info("Today is Sunday, sending weekly summary...")
         await send_weekly_summary(context, now)
 
 
@@ -212,7 +212,7 @@ async def daily_check_and_send_monthly_summary(context: ContextTypes.DEFAULT_TYP
     last_day_of_month = calendar.monthrange(now.year, now.month)[1]
     
     if now.day == last_day_of_month:
-        logging.info("Today is the last day of the month, sending monthly summary...")
+        logger.info("Today is the last day of the month, sending monthly summary...")
         await send_monthly_summary(context, now)
 
 

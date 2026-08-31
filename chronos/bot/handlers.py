@@ -2,6 +2,8 @@ import asyncio
 import calendar
 import io
 import logging
+
+logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -290,13 +292,13 @@ async def send_summary(bot, kind: str, target_date=None, recovered: bool = False
                 caption=message,
                 parse_mode=ParseMode.MARKDOWN
             )
-            logging.info(f"{kind.capitalize()} summary sent as image.")
+            logger.info(f"{kind.capitalize()} summary sent as image.")
         except Exception as img_err:
-            logging.error(f"Failed to generate/send {kind} summary image: {img_err}. Falling back to text.", exc_info=True)
+            logger.error(f"Failed to generate/send {kind} summary image: {img_err}. Falling back to text.", exc_info=True)
             await bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
     else:
         await bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        logging.info(f"{kind.capitalize()} summary sent as text.")
+        logger.info(f"{kind.capitalize()} summary sent as text.")
 
     if mark_sent:
         set_value(cfg["last_sent_key"], _summary_marker_date(kind, target_date).isoformat())
@@ -311,13 +313,13 @@ def get_daily_summary_message(target_date=None) -> str:
 
 async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE, target_date=None):
     """Sends the daily summary message to the channel."""
-    logging.info("Sending daily summary...")
+    logger.info("Sending daily summary...")
     await send_summary(context.bot, "daily", target_date)
 
 
 async def test_codeforces_submission(app: Application):
     """Fetches the latest CF submission and sends a test notification."""
-    logging.info("--- Testing Codeforces Submission ---")
+    logger.info("--- Testing Codeforces Submission ---")
     try:
         method_name = "user.status"
         # Lazy import to avoid circular dependency
@@ -375,9 +377,9 @@ async def test_codeforces_submission(app: Application):
                         caption=caption,
                         parse_mode=ParseMode.MARKDOWN
                     )
-                    logging.info(f"Sent Codeforces test photo notification for submission {submission['id']}.")
+                    logger.info(f"Sent Codeforces test photo notification for submission {submission['id']}.")
                 except Exception as img_err:
-                    logging.error(f"Failed to generate/send Codeforces test image: {img_err}. Falling back to text.", exc_info=True)
+                    logger.error(f"Failed to generate/send Codeforces test image: {img_err}. Falling back to text.", exc_info=True)
                     message = (
                         f"👾 *[TEST] Latest Submission* 👾\n\n"
                         f"**Platform:** Codeforces\n"
@@ -399,22 +401,22 @@ async def test_codeforces_submission(app: Application):
                     f"**Memory:** {submission['memoryConsumedBytes'] // 1024} KB"
                 )
                 await app.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-            logging.info(f"Sent Codeforces test notification for submission {submission['id']}.")
+            logger.info(f"Sent Codeforces test notification for submission {submission['id']}.")
         else:
-            logging.warning(f"Could not fetch latest Codeforces submission. Status: {data.get('comment')}")
+            logger.warning(f"Could not fetch latest Codeforces submission. Status: {data.get('comment')}")
     except httpx.RequestError as e:
-        logging.error(f"An error occurred with Codeforces API during test: {e}")
+        logger.error(f"An error occurred with Codeforces API during test: {e}")
     except httpx.HTTPStatusError as e:
-        logging.error(f"Codeforces API returned error status {e.response.status_code} during test: {e}")
+        logger.error(f"Codeforces API returned error status {e.response.status_code} during test: {e}")
     except httpx.TimeoutException as e:
-        logging.error(f"Codeforces API request timed out during test: {e}")
+        logger.error(f"Codeforces API request timed out during test: {e}")
     except Exception as e:
-        logging.error(f"An unexpected error occurred during Codeforces test: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred during Codeforces test: {e}", exc_info=True)
 
 
 async def test_leetcode_submission(app: Application):
     """Fetches the latest LC submission and sends a test notification."""
-    logging.info("--- Testing LeetCode Submission ---")
+    logger.info("--- Testing LeetCode Submission ---")
     graphql_query = {
         "query": """
             query recentAcSubmissions($username: String!, $limit: Int!) {
@@ -439,7 +441,7 @@ async def test_leetcode_submission(app: Application):
             data = response.json()
 
         if "errors" in data:
-            logging.error(f"LeetCode API error on test fetch: {data['errors']}")
+            logger.error(f"LeetCode API error on test fetch: {data['errors']}")
             return
 
         submissions = data.get("data", {}).get("recentAcSubmissionList", [])
@@ -494,9 +496,9 @@ async def test_leetcode_submission(app: Application):
                         caption=caption,
                         parse_mode=ParseMode.MARKDOWN
                     )
-                    logging.info(f"Sent LeetCode test photo notification for submission {sub['id']}")
+                    logger.info(f"Sent LeetCode test photo notification for submission {sub['id']}")
                 except Exception as img_err:
-                    logging.error(f"Failed to generate/send LeetCode test image: {img_err}. Falling back to text.", exc_info=True)
+                    logger.error(f"Failed to generate/send LeetCode test image: {img_err}. Falling back to text.", exc_info=True)
                     message = (
                         f"👾 *[TEST] Latest Submission* 👾\n\n"
                         f"**Platform:** LeetCode\n"
@@ -520,11 +522,11 @@ async def test_leetcode_submission(app: Application):
                 else:
                     message += "\n_(Could not fetch runtime/memory details)_"
                 await app.bot.send_message(config.CHANNEL_ID, message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-            logging.info(f"Sent LeetCode test notification for submission ID {sub['id']}")
+            logger.info(f"Sent LeetCode test notification for submission ID {sub['id']}")
         else:
-            logging.warning("Could not find any recent LeetCode submissions to test.")
+            logger.warning("Could not find any recent LeetCode submissions to test.")
     except Exception as e:
-        logging.error(f"An error occurred during LeetCode test: {e}", exc_info=True)
+        logger.error(f"An error occurred during LeetCode test: {e}", exc_info=True)
 
 
 def _start_of_week(dt):
@@ -608,7 +610,7 @@ def _make_stats_handler(
                     parse_mode=ParseMode.MARKDOWN
                 )
             except Exception as img_err:
-                logging.error(f"Failed to generate/send {kind} stats summary image: {img_err}. Falling back to text.", exc_info=True)
+                logger.error(f"Failed to generate/send {kind} stats summary image: {img_err}. Falling back to text.", exc_info=True)
                 await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
         else:
             await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
@@ -824,7 +826,7 @@ def restrict_to_owner(func):
         if config.OWNER_USER_ID is not None:
             user = update.effective_user
             if not user or user.id != config.OWNER_USER_ID:
-                logging.warning(f"Unauthorized command access attempt from user ID: {user.id if user else 'Unknown'}")
+                logger.warning(f"Unauthorized command access attempt from user ID: {user.id if user else 'Unknown'}")
                 if update.message:
                     await update.message.reply_text("❌ Unauthorized: Only the bot owner can access this command.")
                 return
@@ -848,9 +850,9 @@ def register_handlers(app: Application):
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Logs the error and provides a specific message for conflict errors."""
     if isinstance(context.error, Conflict):
-        logging.critical(
+        logger.critical(
             "Conflict error detected. Another instance of the bot is already running. "
             "Please stop the other instance before starting a new one."
         )
     else:
-        logging.error("Exception while handling an update:", exc_info=context.error) 
+        logger.error("Exception while handling an update:", exc_info=context.error) 

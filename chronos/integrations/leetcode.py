@@ -1,6 +1,8 @@
 import asyncio
 import io
 import logging
+
+logger = logging.getLogger(__name__)
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -82,13 +84,13 @@ async def get_latest_leetcode_submission_timestamp(client: httpx.AsyncClient | N
     try:
         data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
         if "errors" in data:
-            logging.error(f"LeetCode API error on init: {data['errors']}")
+            logger.error(f"LeetCode API error on init: {data['errors']}")
             return 0
         submissions = data.get("data", {}).get("recentAcSubmissionList", [])
         if submissions:
             return int(submissions[0]["timestamp"])
     except httpx.RequestError as e:
-        logging.error(f"An error occurred during initial LeetCode submission fetch: {e}")
+        logger.error(f"An error occurred during initial LeetCode submission fetch: {e}")
     return 0
 
 async def get_leetcode_submission_details(submission_id: int, client: httpx.AsyncClient | None = None):
@@ -108,11 +110,11 @@ async def get_leetcode_submission_details(submission_id: int, client: httpx.Asyn
     try:
         data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
         if "errors" in data:
-            logging.error(f"LeetCode API error on submission detail fetch: {data['errors']}")
+            logger.error(f"LeetCode API error on submission detail fetch: {data['errors']}")
             return None
         return data.get("data", {}).get("submissionDetails")
     except httpx.RequestError as e:
-        logging.error(f"An error occurred during LeetCode submission detail fetch: {e}")
+        logger.error(f"An error occurred during LeetCode submission detail fetch: {e}")
     return None
 
 async def get_leetcode_problem_difficulty(title_slug: str, client: httpx.AsyncClient | None = None):
@@ -129,11 +131,11 @@ async def get_leetcode_problem_difficulty(title_slug: str, client: httpx.AsyncCl
     try:
         data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
         if "errors" in data:
-            logging.error(f"LeetCode API error on problem difficulty fetch: {data['errors']}")
+            logger.error(f"LeetCode API error on problem difficulty fetch: {data['errors']}")
             return None
         return data.get("data", {}).get("question", {}).get("difficulty")
     except httpx.RequestError as e:
-        logging.error(f"An error occurred during LeetCode problem difficulty fetch: {e}")
+        logger.error(f"An error occurred during LeetCode problem difficulty fetch: {e}")
     return None
 
 async def get_submission_code(submission_id: int, client: httpx.AsyncClient | None = None) -> str:
@@ -153,11 +155,11 @@ async def get_submission_code(submission_id: int, client: httpx.AsyncClient | No
     try:
         data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
         if "errors" in data:
-            logging.error(f"LeetCode API error getting submission code: {data['errors']}")
+            logger.error(f"LeetCode API error getting submission code: {data['errors']}")
             return ""
         return data.get("data", {}).get("submissionDetails", {}).get("code", "")
     except httpx.RequestError as e:
-        logging.error(f"Error getting submission code: {e}")
+        logger.error(f"Error getting submission code: {e}")
         return ""
 
 
@@ -202,7 +204,7 @@ def get_language_extension(language: str) -> str:
 
 async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
     """Checks for new successful LeetCode submissions and sends notifications."""
-    logging.info("Checking for new LeetCode submissions...")
+    logger.info("Checking for new LeetCode submissions...")
     graphql_query = {
         "query": """
             query recentAcSubmissions($username: String!, $limit: Int!) {
@@ -225,7 +227,7 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
             data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
 
             if "errors" in data:
-                logging.error(f"LeetCode API returned an error: {data['errors']}")
+                logger.error(f"LeetCode API returned an error: {data['errors']}")
                 return
 
             last_timestamp = get_last_leetcode_timestamp()
@@ -236,7 +238,7 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                 latest_ts = int(submissions[0]["timestamp"])
                 save_last_leetcode_timestamp(latest_ts)
                 save_last_leetcode_boundary_ids({str(submissions[0]["id"])})
-                logging.warning(
+                logger.warning(
                     f"LeetCode state was uninitialized (timestamp = 0). "
                     f"Initialized baseline timestamp to {latest_ts} without sending notifications."
                 )
@@ -257,7 +259,7 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
             if submissions and last_timestamp != 0:
                 oldest_ts = min(int(s["timestamp"]) for s in submissions)
                 if oldest_ts > last_timestamp:
-                    logging.warning(
+                    logger.warning(
                         f"Oldest fetched LeetCode submission ({oldest_ts}) is newer than the "
                         f"last processed timestamp ({last_timestamp}); submissions in between may have been missed."
                     )
@@ -267,7 +269,7 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                     problem_id = sub["titleSlug"]
                     
                     if is_problem_solved("leetcode", problem_id):
-                        logging.info(f"Skipping notification and API queries for already solved problem: LC submission {sub['id']}")
+                        logger.info(f"Skipping notification and API queries for already solved problem: LC submission {sub['id']}")
                         continue
 
                     difficulty = await get_leetcode_problem_difficulty(sub['titleSlug'], client=client)
@@ -333,9 +335,9 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                                     caption=caption,
                                     parse_mode=ParseMode.MARKDOWN
                                 )
-                                logging.info(f"Sent photo notification for new unique problem: LC submission {sub['id']}")
+                                logger.info(f"Sent photo notification for new unique problem: LC submission {sub['id']}")
                             except Exception as img_err:
-                                logging.error(f"Failed to generate/send image notification for LC {sub['id']}: {img_err}. Falling back to text.", exc_info=True)
+                                logger.error(f"Failed to generate/send image notification for LC {sub['id']}: {img_err}. Falling back to text.", exc_info=True)
                                 message = format_new_solve_message(
                                     platform="LeetCode",
                                     problem_name=sub['title'],
@@ -373,7 +375,7 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                             )
                         await asyncio.sleep(1) # Avoid rate-limiting Telegram
                     else:
-                        logging.info(f"Skipping notification for already solved problem: LC submission {sub['id']}")
+                        logger.info(f"Skipping notification for already solved problem: LC submission {sub['id']}")
 
                 # Advance the watermark only after the whole batch is processed;
                 # record the IDs sharing the newest timestamp so they are not
@@ -384,7 +386,7 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                 save_last_leetcode_boundary_ids(boundary)
 
     except httpx.RequestError as e:
-        logging.error(f"An error occurred with LeetCode API: {e}")
+        logger.error(f"An error occurred with LeetCode API: {e}")
     except Exception as e:
-        logging.error(f"An unexpected error occurred in LeetCode check: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred in LeetCode check: {e}", exc_info=True)
 
