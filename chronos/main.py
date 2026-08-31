@@ -4,6 +4,7 @@ import logging
 from datetime import time, datetime, timedelta, date
 import calendar
 
+import httpx
 import pytz
 from telegram.ext import Application, ContextTypes
 
@@ -116,6 +117,9 @@ async def post_initialization(application: Application):
     This coroutine is executed once after the application has been initialized.
     It handles all asynchronous setup tasks.
     """
+    # --- Shared HTTP client (closed in post_shutdown) ---
+    application.bot_data["http_client"] = httpx.AsyncClient(timeout=30.0)
+
     # --- Startup Verification ---
     try:
         logger.info(f"--- Verifying access to channel {config.CHANNEL_ID} ---")
@@ -147,7 +151,7 @@ async def post_initialization(application: Application):
     # --- Initial State Sync (Async Part) ---
     if get_last_submission_id() == 0:
         logger.info("First run for Codeforces. Initializing with the latest submission ID...")
-        latest_id = await get_latest_submission_id()
+        latest_id = await get_latest_submission_id(application.bot_data["http_client"])
         if latest_id:
             save_last_submission_id(latest_id)
             logger.info(f"Initialized Codeforces. Will only report submissions newer than ID {latest_id}.")
@@ -156,7 +160,7 @@ async def post_initialization(application: Application):
 
     if get_last_leetcode_timestamp() == 0:
         logger.info("First run for LeetCode. Initializing with the latest submission timestamp...")
-        latest_ts = await get_latest_leetcode_submission_timestamp()
+        latest_ts = await get_latest_leetcode_submission_timestamp(application.bot_data["http_client"])
         if latest_ts:
             save_last_leetcode_timestamp(latest_ts)
             logger.info(f"Initialized LeetCode. Will only report submissions newer than timestamp {latest_ts}.")
@@ -165,6 +169,14 @@ async def post_initialization(application: Application):
 
     # --- Recover Missed Summaries ---
     await recover_missed_summaries(application)
+
+
+async def close_http_client(application: Application) -> None:
+    """Closes the shared HTTP client created in post_initialization."""
+    client = application.bot_data.get("http_client")
+    if client is not None:
+        await client.aclose()
+        logger.info("Shared HTTP client closed.")
 
 
 async def send_monthly_summary(context: ContextTypes.DEFAULT_TYPE, target_date=None):
@@ -212,6 +224,7 @@ def main() -> None:
         Application.builder()
         .token(config.BOT_TOKEN)
         .post_init(post_initialization)
+        .post_shutdown(close_http_client)
         .build()
     )
 

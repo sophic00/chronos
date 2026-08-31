@@ -39,11 +39,19 @@ def get_leetcode_cookies():
 @asynccontextmanager
 async def _get_client(client: Optional[httpx.AsyncClient] = None):
     """Helper to reuse an existing AsyncClient or yield a newly created one."""
-    if client is not None:
+    if isinstance(client, httpx.AsyncClient):
         yield client
     else:
         async with httpx.AsyncClient(timeout=30.0) as new_client:
             yield new_client
+
+
+def _shared_client(context) -> Optional[httpx.AsyncClient]:
+    """Returns the long-lived HTTP client stashed in bot_data, if available."""
+    bot_data = getattr(getattr(context, "application", None), "bot_data", None)
+    if isinstance(bot_data, dict):
+        return bot_data.get("http_client")
+    return None
 
 async def _graphql(query: str, variables: dict, client: Optional[httpx.AsyncClient] = None) -> dict:
     """Executes a GraphQL request against the LeetCode API and returns the JSON response."""
@@ -213,7 +221,7 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
         }
     }
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with _get_client(_shared_client(context)) as client:
             data = await _graphql(graphql_query["query"], graphql_query["variables"], client)
 
             if "errors" in data:

@@ -48,11 +48,19 @@ def _signed_params(method_name: str, extra: dict) -> dict:
 @asynccontextmanager
 async def _get_client(client: Optional[httpx.AsyncClient] = None):
     """Helper to reuse an existing AsyncClient or yield a newly created one."""
-    if client is not None:
+    if isinstance(client, httpx.AsyncClient):
         yield client
     else:
         async with httpx.AsyncClient(timeout=30.0) as new_client:
             yield new_client
+
+
+def _shared_client(context: ContextTypes.DEFAULT_TYPE) -> Optional[httpx.AsyncClient]:
+    """Returns the long-lived HTTP client stashed in bot_data, if available."""
+    bot_data = getattr(getattr(context, "application", None), "bot_data", None)
+    if isinstance(bot_data, dict):
+        return bot_data.get("http_client")
+    return None
 
 
 async def get_latest_submission_id(client: Optional[httpx.AsyncClient] = None):
@@ -96,7 +104,7 @@ async def check_codeforces_submissions(
             "count": 20,
         })
         # Use async httpx and support reusable client
-        async with _get_client(client) as active_client:
+        async with _get_client(client or _shared_client(context)) as active_client:
             response = await active_client.get(
                 constants.CODEFORCES_API_URL + f"/{method_name}", params=params
             )
