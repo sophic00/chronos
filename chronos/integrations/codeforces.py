@@ -13,7 +13,7 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from ..bot.image_generator import generate_solve_card
-from ..bot.messaging import format_new_solve_message, format_bytes, prettify_language
+from ..bot.messaging import format_new_solve_message, format_bytes, prettify_language, escape_md
 from ..config import constants
 from ..config import settings as config
 from ..data.database import log_problem_solved
@@ -157,8 +157,8 @@ async def check_codeforces_submissions(
 
                                 caption = (
                                     f"👾 *New Solve on Codeforces!*\n"
-                                    f"📘 *Problem:* [{problem['name']}]({problem_url})\n"
-                                    f"🏷️ *Rating:* {rating}"
+                                    f"📘 *Problem:* [{escape_md(problem['name'])}]({problem_url})\n"
+                                    f"🏷️ *Rating:* {escape_md(rating)}"
                                 )
 
                                 await context.bot.send_photo(

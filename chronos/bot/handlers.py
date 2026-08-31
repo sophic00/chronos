@@ -17,7 +17,7 @@ from ..config import constants
 from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_past_day_stats_from_db, get_past_week_stats_from_db, set_leetcode_target, get_leetcode_target, set_value, get_daily_breakdown_from_db, get_current_streak
 from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers, get_leetcode_problem_difficulty
 from .image_generator import generate_solve_card, generate_summary_card
-from .messaging import format_bytes, prettify_language
+from .messaging import format_bytes, prettify_language, escape_md
 
 def _stats_total(stats: dict) -> int:
     """Total solve count across all platforms in a stats dictionary."""
@@ -339,7 +339,7 @@ async def test_codeforces_submission(app: Application):
                     
                     caption = (
                         f"👾 *[TEST] Latest Submission on Codeforces*\n"
-                        f"📘 *Problem:* [{problem['name']}]({problem_url})\n"
+                        f"📘 *Problem:* [{escape_md(problem['name'])}]({problem_url})\n"
                         f"🏷️ *Rating:* {rating}"
                     )
                     
@@ -355,7 +355,7 @@ async def test_codeforces_submission(app: Application):
                     message = (
                         f"👾 *[TEST] Latest Submission* 👾\n\n"
                         f"**Platform:** Codeforces\n"
-                        f"**Problem:** [{problem['name']}]({problem_url})\n"
+                        f"**Problem:** [{escape_md(problem['name'])}]({problem_url})\n"
                         f"**Verdict:** {verdict}\n"
                         f"**Language:** {submission['programmingLanguage']}\n"
                         f"**Time:** {submission['timeConsumedMillis']} ms\n"
@@ -366,7 +366,7 @@ async def test_codeforces_submission(app: Application):
                 message = (
                     f"👾 *[TEST] Latest Submission* 👾\n\n"
                     f"**Platform:** Codeforces\n"
-                    f"**Problem:** [{problem['name']}]({problem_url})\n"
+                    f"**Problem:** [{escape_md(problem['name'])}]({problem_url})\n"
                     f"**Verdict:** {verdict}\n"
                     f"**Language:** {submission['programmingLanguage']}\n"
                     f"**Time:** {submission['timeConsumedMillis']} ms\n"
@@ -457,7 +457,7 @@ async def test_leetcode_submission(app: Application):
                     
                     caption = (
                         f"👾 *[TEST] Latest Submission on LeetCode*\n"
-                        f"📘 *Problem:* [{sub['title']}]({problem_url})\n"
+                        f"📘 *Problem:* [{escape_md(sub['title'])}]({problem_url})\n"
                         f"🏷️ *Difficulty:* {difficulty}"
                     )
                     
@@ -473,7 +473,7 @@ async def test_leetcode_submission(app: Application):
                     message = (
                         f"👾 *[TEST] Latest Submission* 👾\n\n"
                         f"**Platform:** LeetCode\n"
-                        f"**Problem:** [{sub['title']}]({problem_url})\n"
+                        f"**Problem:** [{escape_md(sub['title'])}]({problem_url})\n"
                         f"**Language:** {sub['lang']}"
                     )
                     if runtime and memory:
@@ -485,7 +485,7 @@ async def test_leetcode_submission(app: Application):
                 message = (
                     f"👾 *[TEST] Latest Submission* 👾\n\n"
                     f"**Platform:** LeetCode\n"
-                    f"**Problem:** [{sub['title']}]({problem_url})\n"
+                    f"**Problem:** [{escape_md(sub['title'])}]({problem_url})\n"
                     f"**Language:** {sub['lang']}"
                 )
                 if runtime and memory:

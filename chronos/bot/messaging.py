@@ -1,4 +1,7 @@
+import re
 from typing import Optional
+
+from telegram.helpers import escape_markdown
 
 _LANGUAGE_NAMES = {
     "cpp": "C++",
@@ -45,6 +48,20 @@ def format_bytes(num_bytes) -> str:
         return f"{int(round(kb))} KB"
     return f"{kb / 1024:.1f} MB"
 
+def escape_md(text) -> str:
+    """Escapes Telegram legacy Markdown special characters in dynamic text.
+
+    Problem titles and handles can contain '_', '*', '[' etc., which would
+    otherwise break (or inject) message formatting.
+    """
+    return escape_markdown(str(text), version=1)
+
+
+def sanitize_code_block(code: str) -> str:
+    """Collapses fence-breaking backtick runs so code renders inside a ``` block."""
+    return re.sub(r"`{3,}", "``", code or "")
+
+
 def format_new_solve_message(
     platform: str,
     problem_name: str,
@@ -71,18 +88,18 @@ def format_new_solve_message(
 
     message = (
         f"👾 *New Solve*\n\n"
-        f"⚔️ *Platform:* {platform}\n"
-        f"📘 *Problem:* [{problem_name}]({problem_url})\n"
-        f"🏷️ *Difficulty:* {difficulty_str}\n"
-        f"💻 *Language:* {language}\n"
+        f"⚔️ *Platform:* {escape_md(platform)}\n"
+        f"📘 *Problem:* [{escape_md(problem_name)}]({problem_url})\n"
+        f"🏷️ *Difficulty:* {escape_md(difficulty_str)}\n"
+        f"💻 *Language:* {escape_md(language)}\n"
     )
 
     if runtime:
-        message += f"⚡ *Runtime:* {runtime}\n"
+        message += f"⚡ *Runtime:* {escape_md(runtime)}\n"
     if memory:
-        message += f"🧠 *Memory:* {memory}\n"
+        message += f"🧠 *Memory:* {escape_md(memory)}\n"
 
     if code and language_ext:
-        message += f"\n💡 *Solution:*\n```{language_ext}\n{code}\n```"
+        message += f"\n💡 *Solution:*\n```{language_ext}\n{sanitize_code_block(code)}\n```"
         
     return message 

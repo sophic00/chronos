@@ -19,7 +19,7 @@ from ..data.state_manager import (
     get_last_leetcode_boundary_ids,
     save_last_leetcode_boundary_ids,
 )
-from ..bot.messaging import format_new_solve_message, format_bytes, prettify_language
+from ..bot.messaging import format_new_solve_message, format_bytes, prettify_language, escape_md
 from ..bot.image_generator import generate_solve_card
 
 def get_leetcode_headers():
@@ -318,8 +318,8 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                                 
                                 caption = (
                                     f"👾 *New Solve on LeetCode!*\n"
-                                    f"📘 *Problem:* [{sub['title']}]({problem_url})\n"
-                                    f"🏷️ *Difficulty:* {difficulty if difficulty else 'N/A'}"
+                                    f"📘 *Problem:* [{escape_md(sub['title'])}]({problem_url})\n"
+                                    f"🏷️ *Difficulty:* {escape_md(difficulty if difficulty else 'N/A')}"
                                 )
                                 
                                 await context.bot.send_photo(
