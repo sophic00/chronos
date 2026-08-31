@@ -8,36 +8,56 @@ Telegram bot to monitor and log solved problems on LeetCode and Codeforces. It f
 
 ```text
 .
+├── .dockerignore
 ├── .env.example
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml
-├── Dockerfile
-├── assets/
+│       └── ci.yml
+├── assets/                  # Static preview assets + vendored fonts/logos
+│   ├── fonts/
 │   ├── solve_codeforces.png
 │   ├── solve_leetcode.png
 │   └── summary_daily.png
 ├── chronos/
 │   ├── bot/
-│   │   ├── handlers.py
+│   │   ├── handlers.py      # Commands, summaries, image orchestration
 │   │   ├── image_generator.py
 │   │   └── messaging.py
 │   ├── config/
 │   │   ├── constants.py
 │   │   └── settings.py
+│   ├── data/
+│   │   ├── database.py      # SQLAlchemy ORM service + wrappers
+│   │   ├── models.py
+│   │   └── state_manager.py
 │   ├── integrations/
 │   │   ├── codeforces.py
 │   │   └── leetcode.py
 │   └── main.py
+├── Dockerfile
 ├── deploy.sh
 ├── pyproject.toml
-├── requirements.txt
 └── tests/
     ├── conftest.py
     ├── test_database.py
     ├── test_image_generator.py
     ├── test_integrations.py
-    └── test_owner_restriction.py
+    ├── test_owner_restriction.py
+    ├── test_settings.py
+    └── test_stats_handlers.py
+```
+
+The `data/` directory is runtime-only (SQLite database and any downloaded
+asset fallbacks) and is excluded from the Docker build context.
+
+---
+
+## Development
+
+```bash
+uv sync                 # install runtime + dev dependencies from uv.lock
+uv run pytest -q        # run the test suite
+uv run ruff check .     # lint
 ```
 
 ---
