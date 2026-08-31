@@ -9,9 +9,11 @@ from .messaging import cf_rating_bands
 
 logger = logging.getLogger(__name__)
 
-# Cache fonts in the workspace data directory
+# Fonts are vendored in assets/fonts; the download URLs below are only a
+# fallback for checkouts where they are missing.
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-FONTS_DIR = os.path.join(BASE_DIR, "data", "fonts")
+ASSETS_DIR = os.path.join(BASE_DIR, "assets")
+FONTS_DIR = os.path.join(ASSETS_DIR, "fonts")
 
 # Inter is distributed as a single variable font; weights are selected at load time.
 FONTS = {
@@ -84,7 +86,7 @@ def ensure_assets() -> None:
                 logger.error(f"Failed to download font {name} from {url}: {e}")
 
     # Download LeetCode logo
-    logo_dir = os.path.join(BASE_DIR, "data")
+    logo_dir = ASSETS_DIR
     os.makedirs(logo_dir, exist_ok=True)
     logo_path = os.path.join(logo_dir, "leetcode.png")
     if not os.path.exists(logo_path):
@@ -296,7 +298,7 @@ def generate_solve_card(platform: str, title: str, difficulty: str, stats: list[
     logo_draw = ImageDraw.Draw(logo_img)
 
     if is_leetcode:
-        logo_path = os.path.join(BASE_DIR, "data", "leetcode.png")
+        logo_path = os.path.join(ASSETS_DIR, "leetcode.png")
         loaded = False
         if os.path.exists(logo_path):
             try:
