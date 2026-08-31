@@ -4,6 +4,8 @@ import urllib.request
 import logging
 from PIL import Image, ImageDraw, ImageFont
 
+from .messaging import cf_rating_bands
+
 logger = logging.getLogger(__name__)
 
 # Cache fonts in the workspace data directory
@@ -528,26 +530,7 @@ def generate_summary_card(summary_type: str, date_str: str, stats: dict,
     lc_na = sum(count for diff, count in lc_stats.items() if diff not in ("Easy", "Medium", "Hard"))
     lc_total = sum(lc_stats.values())
 
-    cf_800_1000 = 0
-    cf_1100_1300 = 0
-    cf_1400_1600 = 0
-    cf_1700_plus = 0
-    cf_na = 0
-    for rating_str, count in cf_stats.items():
-        if str(rating_str).isdigit():
-            rating = int(rating_str)
-            if 800 <= rating <= 1000:
-                cf_800_1000 += count
-            elif 1100 <= rating <= 1300:
-                cf_1100_1300 += count
-            elif 1400 <= rating <= 1600:
-                cf_1400_1600 += count
-            elif rating >= 1700:
-                cf_1700_plus += count
-            else:
-                cf_na += count
-        else:
-            cf_na += count
+    cf_bands = cf_rating_bands(cf_stats)
 
     cf_total = sum(cf_stats.values())
     grand_total = lc_total + cf_total
@@ -595,11 +578,11 @@ def generate_summary_card(summary_type: str, date_str: str, stats: dict,
     draw.line((right_x + 36, box_y + 56, right_x + box_w - 36, box_y + 56), fill=DIVIDER, width=1)
 
     cf_rows = [
-        ("Rating 800 - 1000", cf_800_1000, (136, 136, 136)),
-        ("Rating 1100 - 1300", cf_1100_1300, (34, 197, 94)),
-        ("Rating 1400 - 1600", cf_1400_1600, (3, 168, 158)),
-        ("Rating 1700+", cf_1700_plus, (59, 130, 246)),
-        ("Unrated / Other", cf_na, (110, 118, 129)),
+        ("Rating 800 - 1000", cf_bands["800-1000"], (136, 136, 136)),
+        ("Rating 1100 - 1300", cf_bands["1100-1300"], (34, 197, 94)),
+        ("Rating 1400 - 1600", cf_bands["1400-1600"], (3, 168, 158)),
+        ("Rating 1700+", cf_bands["1700+"], (59, 130, 246)),
+        ("Unrated / Other", cf_bands["unrated"], (110, 118, 129)),
     ]
     cf_max = max([count for _, count, _ in cf_rows] + [1])
     cf_row_start_y = box_y + 74

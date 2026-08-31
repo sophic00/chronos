@@ -62,6 +62,32 @@ def sanitize_code_block(code: str) -> str:
     return re.sub(r"`{3,}", "``", code or "")
 
 
+def cf_rating_bands(cf_stats: dict) -> dict:
+    """Aggregates Codeforces solve counts into rating bands.
+
+    Shared by the text summaries and the image cards so the banding cannot
+    drift between the two. Returns keys: '800-1000', '1100-1300',
+    '1400-1600', '1700+', 'unrated'.
+    """
+    bands = {"800-1000": 0, "1100-1300": 0, "1400-1600": 0, "1700+": 0, "unrated": 0}
+    for rating_str, count in cf_stats.items():
+        if str(rating_str).isdigit():
+            rating = int(rating_str)
+            if 800 <= rating <= 1000:
+                bands["800-1000"] += count
+            elif 1100 <= rating <= 1300:
+                bands["1100-1300"] += count
+            elif 1400 <= rating <= 1600:
+                bands["1400-1600"] += count
+            elif rating >= 1700:
+                bands["1700+"] += count
+            else:  # Digits but outside any defined band (e.g. 1050)
+                bands["unrated"] += count
+        else:
+            bands["unrated"] += count
+    return bands
+
+
 def format_new_solve_message(
     platform: str,
     problem_name: str,

@@ -16,7 +16,7 @@ from ..config import constants
 from ..data.database import get_daily_stats_from_db, get_monthly_stats_from_db, get_weekly_stats_from_db, get_past_day_stats_from_db, get_past_week_stats_from_db, set_leetcode_target, get_leetcode_target, set_value, get_daily_breakdown_from_db, get_current_streak
 from ..integrations.leetcode import get_leetcode_submission_details, get_leetcode_cookies, get_leetcode_headers, get_leetcode_problem_difficulty
 from .image_generator import generate_solve_card, generate_summary_card
-from .messaging import format_bytes, prettify_language, escape_md
+from .messaging import format_bytes, prettify_language, escape_md, cf_rating_bands
 
 def _stats_total(stats: dict) -> int:
     """Total solve count across all platforms in a stats dictionary."""
@@ -111,27 +111,7 @@ def _format_summary_message(stats: dict, target_type: str = None) -> tuple[str, 
     lc_total = sum(lc_stats.values())
 
     # Codeforces stats aggregation
-    cf_800_1000 = 0
-    cf_1100_1300 = 0
-    cf_1400_1600 = 0
-    cf_1700_plus = 0
-    cf_na = 0
-    
-    for rating_str, count in cf_stats.items():
-        if str(rating_str).isdigit():
-            rating = int(rating_str)
-            if 800 <= rating <= 1000:
-                cf_800_1000 += count
-            elif 1100 <= rating <= 1300:
-                cf_1100_1300 += count
-            elif 1400 <= rating <= 1600:
-                cf_1400_1600 += count
-            elif rating >= 1700:
-                cf_1700_plus += count
-            else: # For ratings outside defined bands but still digits
-                cf_na += count 
-        else:
-            cf_na += count
+    cf_bands = cf_rating_bands(cf_stats)
             
     cf_total = sum(cf_stats.values())
     grand_total = lc_total + cf_total
@@ -165,11 +145,11 @@ def _format_summary_message(stats: dict, target_type: str = None) -> tuple[str, 
     if cf_total > 0:
         cf_summary = (
             f"⚔️ *Codeforces Summary*\n"
-            f"↦ 🥉 *800–1000:* {cf_800_1000}\n"
-            f"↦ 🥈 *1100–1300:* {cf_1100_1300}\n"
-            f"↦ 🥇 *1400–1600:* {cf_1400_1600}\n"
-            f"↦ 🏆 *1700+:* {cf_1700_plus}\n"
-            f"↦ ❓ *Unrated/Other:* {cf_na}\n"
+            f"↦ 🥉 *800–1000:* {cf_bands['800-1000']}\n"
+            f"↦ 🥈 *1100–1300:* {cf_bands['1100-1300']}\n"
+            f"↦ 🥇 *1400–1600:* {cf_bands['1400-1600']}\n"
+            f"↦ 🏆 *1700+:* {cf_bands['1700+']}\n"
+            f"↦ ❓ *Unrated/Other:* {cf_bands['unrated']}\n"
             f"✅ *Total Codeforces:* {cf_total} problems"
         )
         message_parts.append(cf_summary)
