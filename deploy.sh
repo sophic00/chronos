@@ -1,29 +1,34 @@
 #!/bin/bash
-set -e # Exit immediately if a command exits with a non-zero status.
+set -euo pipefail # Exit immediately on error, undefined vars, or failed pipes.
 
 # --- Configuration ---
-# IMPORTANT: Change this to the absolute path of your project directory on the server.
-PROJECT_DIR="/home/deploy/chronos"
+# Override with CHRONOS_PROJECT_DIR if the project lives elsewhere.
+PROJECT_DIR="${CHRONOS_PROJECT_DIR:-/home/deploy/chronos}"
 CONTAINER_NAME="chronos"
+BRANCH="prod"
 
 echo "--- Starting deployment ---"
 
 # --- Navigation & Git Update ---
 cd "$PROJECT_DIR"
 echo "--- In project directory: $(pwd) ---"
+if [ ! -f .env ]; then
+    echo "ERROR: $PROJECT_DIR/.env not found. Aborting before touching anything." >&2
+    exit 1
+fi
 echo "--- Fetching latest code from origin ---"
 git fetch origin
-echo "--- Resetting prod branch to match remote ---"
-git checkout prod
-git reset --hard origin/prod
+echo "--- Resetting $BRANCH to match remote ---"
+git checkout "$BRANCH"
+git reset --hard "origin/$BRANCH"
 
 # --- Docker Operations ---
+echo "--- Building new image (old container keeps running) ---"
+docker build -t "$CONTAINER_NAME" .
+
 echo "--- Stopping and removing old container ---"
 docker stop "$CONTAINER_NAME" || true
 docker rm "$CONTAINER_NAME" || true
-
-echo "--- Building new Docker image ---"
-docker build -t "$CONTAINER_NAME" .
 
 # Create a data directory for persistent storage if it doesn't exist
 mkdir -p data
@@ -45,4 +50,4 @@ rm .env.docker
 echo "--- Pruning old Docker images ---"
 docker image prune -f
 
-echo "--- Deployment finished successfully! ---" 
+echo "--- Deployment finished successfully! ---"
