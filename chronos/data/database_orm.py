@@ -7,7 +7,7 @@ from typing import Dict, Optional, List
 import pytz
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, func, and_
+from sqlalchemy import create_engine, func, and_, inspect, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -42,10 +42,26 @@ class DatabaseService:
         """Initialize the database and create tables."""
         try:
             Base.metadata.create_all(bind=self.engine)
+            self._ensure_indexes()
             logging.info("Database initialized successfully with ORM.")
         except SQLAlchemyError as e:
             logging.error(f"Error initializing database: {e}")
             raise
+
+    def _ensure_indexes(self):
+        """create_all() only applies indexes for brand-new tables; add any
+        missing ones for databases created before they were declared."""
+        inspector = inspect(self.engine)
+        if "solved_problems" not in inspector.get_table_names():
+            return
+        existing = {ix["name"] for ix in inspector.get_indexes("solved_problems")}
+        if "ix_solved_problems_first_solve_date" not in existing:
+            with self.engine.begin() as conn:
+                conn.execute(text(
+                    "CREATE INDEX ix_solved_problems_first_solve_date "
+                    "ON solved_problems (first_solve_date)"
+                ))
+            logging.info("Created index ix_solved_problems_first_solve_date.")
     
     def log_problem_solved(self, platform: str, problem_id: str, rating: str) -> bool:
         """

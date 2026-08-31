@@ -15,7 +15,7 @@ class SolvedProblem(Base):
     
     platform = Column(String, primary_key=True, nullable=False)
     problem_id = Column(String, primary_key=True, nullable=False)
-    first_solve_date = Column(Date, nullable=False)
+    first_solve_date = Column(Date, nullable=False, index=True)
     rating = Column(String)
     
     def __repr__(self):
