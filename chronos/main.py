@@ -246,9 +246,10 @@ async def post_initialization(application: Application):
             await test_leetcode_submission(application)
         
         logger.info("--- TEST MODE FINISHED. ---")
-        # Stop the application, which will cause run_polling() to exit.
-        application.stop()
-        return
+        # run_polling() is still in post_init at this point, so the application is
+        # not "running" yet and Application.stop() would raise RuntimeError.
+        # Raising SystemExit unwinds run_polling and exits the process cleanly.
+        raise SystemExit(0)
 
     # --- Initial State Sync (Async Part) ---
     if get_last_submission_id() == 0:
