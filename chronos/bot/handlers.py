@@ -474,298 +474,173 @@ async def test_leetcode_submission(app: Application):
         logging.error(f"An error occurred during LeetCode test: {e}", exc_info=True)
 
 
-async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Replies with the current daily stats."""
-    stats = get_daily_stats_from_db()
-    summary_details, grand_total = _format_summary_message(stats, 'daily')
+def _start_of_week(dt):
+    return (dt - timedelta(days=dt.weekday())).date()
 
-    if grand_total == 0:
-        # Check if there are daily targets set
-        targets = get_leetcode_target('daily')
-        if targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0:
-            target_summary = (
-                f"📊 *Today's Progress*\n"
-                f"🎯 *Daily Targets:*\n"
-                f"🟢 Easy: {_format_progress_bar(0, targets['easy'])}\n"
-                f"🟡 Medium: {_format_progress_bar(0, targets['medium'])}\n"
-                f"🔴 Hard: {_format_progress_bar(0, targets['hard'])}\n\n"
-                f"You haven't solved any new problems yet today. Let's get started! 💪"
-            )
-            await update.message.reply_text(target_summary, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+def _week_range(start_date):
+    end_date = start_date + timedelta(days=6)
+    return f"{start_date.strftime('%b %d')} - {end_date.strftime('%b %d, %Y')}"
+
+def _start_of_last_week(dt):
+    return (dt - timedelta(days=dt.weekday())).date() - timedelta(days=7)
+
+
+def _make_stats_handler(
+    kind: str,
+    fetch_stats,
+    heading: str,
+    total_label: str,
+    period_label: str,
+    period_fn,
+    extras_date_fn,
+    target_kind: str,
+    empty_heading: str,
+    empty_period: bool,
+    target_label: str,
+    empty_msg: str,
+    empty_no_targets: str,
+):
+    """Builds a /stats-style command handler.
+
+    All five stats commands share the same flow; only the period, DB source
+    and wording differ, so those are captured here.
+    """
+    async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        now = datetime.now(pytz.timezone(config.TIMEZONE))
+        stats = fetch_stats()
+        summary_details, grand_total = _format_summary_message(stats, kind)
+        period = period_fn(now)
+        targets = get_leetcode_target(target_kind)
+        targets_set = targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0
+
+        if grand_total == 0:
+            if targets_set:
+                target_summary = (
+                    f"📊 *{empty_heading}*\n"
+                    + (f"🗓️ *{period_label}:* {period}\n" if empty_period else "")
+                    + f"🎯 *{target_label}:*\n"
+                    f"🟢 Easy: {_format_progress_bar(0, targets['easy'])}\n"
+                    f"🟡 Medium: {_format_progress_bar(0, targets['medium'])}\n"
+                    f"🔴 Hard: {_format_progress_bar(0, targets['hard'])}\n\n"
+                    f"{empty_msg}"
+                )
+                await update.message.reply_text(target_summary, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+            else:
+                await update.message.reply_text(
+                    empty_no_targets.format(period=period), disable_web_page_preview=True
+                )
+            return
+
+        summary_message = (
+            f"📊 *{heading}*\n"
+            f"🗓️ *{period_label}:* {period}\n"
+            f"🚀 *Progress Overview*\n\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"{summary_details}\n\n"
+            f"━━━━━━━━━━━━━━━\n\n"
+            f"🎯 *{total_label}:* {grand_total}"
+        )
+
+        if config.SEND_AS_IMAGE:
+            try:
+                image_bytes = generate_summary_card(
+                    kind, period, stats,
+                    targets=targets,
+                    extras=_build_summary_extras(kind, extras_date_fn(now))
+                )
+                await update.message.reply_photo(
+                    photo=io.BytesIO(image_bytes),
+                    caption=summary_message,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as img_err:
+                logging.error(f"Failed to generate/send {kind} stats summary image: {img_err}. Falling back to text.", exc_info=True)
+                await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
         else:
-            summary_message = "You haven't solved any new problems yet today. Let's get started! 💪"
-            await update.message.reply_text(summary_message, disable_web_page_preview=True)
-        return
-
-    local_tz = pytz.timezone(config.TIMEZONE)
-    date_str = datetime.now(local_tz).strftime("%B %d, %Y")
-
-    summary_message = (
-        f"📊 *Today's Progress So Far*\n"
-        f"🗓️ *Date:* {date_str}\n"
-        f"🚀 *Progress Overview*\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"{summary_details}\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"🎯 *Grand Total Solved Today:* {grand_total}"
-    )
-    
-    if config.SEND_AS_IMAGE:
-        try:
-            today = datetime.now(local_tz).date()
-            image_bytes = generate_summary_card(
-                "daily", date_str, stats,
-                targets=get_leetcode_target('daily'),
-                extras=_build_summary_extras('daily', today)
-            )
-            await update.message.reply_photo(
-                photo=io.BytesIO(image_bytes),
-                caption=summary_message,
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except Exception as img_err:
-            logging.error(f"Failed to generate/send stats summary image: {img_err}. Falling back to text.", exc_info=True)
             await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-    else:
-        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+
+    return handler
 
 
-async def monthly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Replies with the current monthly stats."""
-    stats = get_monthly_stats_from_db()
-    summary_details, grand_total = _format_summary_message(stats, 'monthly')
+stats_handler = _make_stats_handler(
+    kind="daily",
+    fetch_stats=lambda: get_daily_stats_from_db(),
+    heading="Today's Progress So Far",
+    total_label="Grand Total Solved Today",
+    period_label="Date",
+    period_fn=lambda now: now.strftime("%B %d, %Y"),
+    extras_date_fn=lambda now: now.date(),
+    target_kind="daily",
+    empty_heading="Today's Progress",
+    empty_period=False,
+    target_label="Daily Targets",
+    empty_msg="You haven't solved any new problems yet today. Let's get started! 💪",
+    empty_no_targets="You haven't solved any new problems yet today. Let's get started! 💪",
+)
 
-    local_tz = pytz.timezone(config.TIMEZONE)
-    current_date = datetime.now(local_tz)
-    month_year = current_date.strftime("%B %Y")
+monthly_stats_handler = _make_stats_handler(
+    kind="monthly",
+    fetch_stats=lambda: get_monthly_stats_from_db(),
+    heading="Monthly Progress Report",
+    total_label="Grand Total Solved This Month",
+    period_label="Period",
+    period_fn=lambda now: now.strftime("%B %Y"),
+    extras_date_fn=lambda now: now.date(),
+    target_kind="monthly",
+    empty_heading="Monthly Progress Report",
+    empty_period=True,
+    target_label="Monthly Targets",
+    empty_msg="You haven't solved any new problems this month yet. Let's get started! 💪",
+    empty_no_targets="You haven't solved any new problems this month yet. Let's get started! 💪",
+)
 
-    if grand_total == 0:
-        # Check if there are monthly targets set
-        targets = get_leetcode_target('monthly')
-        if targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0:
-            target_summary = (
-                f"📊 *Monthly Progress Report*\n"
-                f"🗓️ *Period:* {month_year}\n"
-                f"🎯 *Monthly Targets:*\n"
-                f"🟢 Easy: {_format_progress_bar(0, targets['easy'])}\n"
-                f"🟡 Medium: {_format_progress_bar(0, targets['medium'])}\n"
-                f"🔴 Hard: {_format_progress_bar(0, targets['hard'])}\n\n"
-                f"You haven't solved any new problems this month yet. Let's get started! 💪"
-            )
-            await update.message.reply_text(target_summary, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        else:
-            summary_message = "You haven't solved any new problems this month yet. Let's get started! 💪"
-            await update.message.reply_text(summary_message, disable_web_page_preview=True)
-        return
+weekly_stats_handler = _make_stats_handler(
+    kind="weekly",
+    fetch_stats=lambda: get_weekly_stats_from_db(),
+    heading="Weekly Progress Report",
+    total_label="Grand Total Solved This Week",
+    period_label="Period",
+    period_fn=lambda now: _week_range(_start_of_week(now)),
+    extras_date_fn=lambda now: now.date(),
+    target_kind="weekly",
+    empty_heading="Weekly Progress Report",
+    empty_period=True,
+    target_label="Weekly Targets",
+    empty_msg="You haven't solved any new problems this week yet. Let's get started! 💪",
+    empty_no_targets="You haven't solved any new problems this week yet. Let's get started! 💪",
+)
 
-    summary_message = (
-        f"📊 *Monthly Progress Report*\n"
-        f"🗓️ *Period:* {month_year}\n"
-        f"🚀 *Progress Overview*\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"{summary_details}\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"🎯 *Grand Total Solved This Month:* {grand_total}"
-    )
-    
-    if config.SEND_AS_IMAGE:
-        try:
-            image_bytes = generate_summary_card(
-                "monthly", month_year, stats,
-                targets=get_leetcode_target('monthly'),
-                extras=_build_summary_extras('monthly', current_date.date())
-            )
-            await update.message.reply_photo(
-                photo=io.BytesIO(image_bytes),
-                caption=summary_message,
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except Exception as img_err:
-            logging.error(f"Failed to generate/send monthly stats summary image: {img_err}. Falling back to text.", exc_info=True)
-            await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-    else:
-        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+past_day_stats_handler = _make_stats_handler(
+    kind="daily",
+    fetch_stats=lambda: get_past_day_stats_from_db(),
+    heading="Yesterday's Progress Report",
+    total_label="Grand Total Solved Yesterday",
+    period_label="Date",
+    period_fn=lambda now: (now - timedelta(days=1)).strftime("%B %d, %Y"),
+    extras_date_fn=lambda now: (now - timedelta(days=1)).date(),
+    target_kind="daily",
+    empty_heading="Yesterday's Progress Report",
+    empty_period=True,
+    target_label="Daily Targets (for reference)",
+    empty_msg="You didn't solve any new problems yesterday. 📅",
+    empty_no_targets="You didn't solve any new problems on {period}. 📅",
+)
 
-
-async def weekly_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Replies with the current weekly stats."""
-    stats = get_weekly_stats_from_db()
-    summary_details, grand_total = _format_summary_message(stats, 'weekly')
-
-    local_tz = pytz.timezone(config.TIMEZONE)
-    current_date = datetime.now(local_tz)
-    # Calculate week range (Monday to Sunday)
-    days_since_monday = current_date.weekday()
-    start_of_week = current_date - timedelta(days=days_since_monday)
-    end_of_week = start_of_week + timedelta(days=6)
-    week_range = f"{start_of_week.strftime('%b %d')} - {end_of_week.strftime('%b %d, %Y')}"
-
-    if grand_total == 0:
-        # Check if there are weekly targets set
-        targets = get_leetcode_target('weekly')
-        if targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0:
-            target_summary = (
-                f"📊 *Weekly Progress Report*\n"
-                f"🗓️ *Period:* {week_range}\n"
-                f"🎯 *Weekly Targets:*\n"
-                f"🟢 Easy: {_format_progress_bar(0, targets['easy'])}\n"
-                f"🟡 Medium: {_format_progress_bar(0, targets['medium'])}\n"
-                f"🔴 Hard: {_format_progress_bar(0, targets['hard'])}\n\n"
-                f"You haven't solved any new problems this week yet. Let's get started! 💪"
-            )
-            await update.message.reply_text(target_summary, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        else:
-            summary_message = "You haven't solved any new problems this week yet. Let's get started! 💪"
-            await update.message.reply_text(summary_message, disable_web_page_preview=True)
-        return
-
-    summary_message = (
-        f"📊 *Weekly Progress Report*\n"
-        f"🗓️ *Period:* {week_range}\n"
-        f"🚀 *Progress Overview*\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"{summary_details}\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"🎯 *Grand Total Solved This Week:* {grand_total}"
-    )
-    
-    if config.SEND_AS_IMAGE:
-        try:
-            image_bytes = generate_summary_card(
-                "weekly", week_range, stats,
-                targets=get_leetcode_target('weekly'),
-                extras=_build_summary_extras('weekly', current_date.date())
-            )
-            await update.message.reply_photo(
-                photo=io.BytesIO(image_bytes),
-                caption=summary_message,
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except Exception as img_err:
-            logging.error(f"Failed to generate/send weekly stats summary image: {img_err}. Falling back to text.", exc_info=True)
-            await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-    else:
-        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-
-
-async def past_day_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Replies with yesterday's stats."""
-    stats = get_past_day_stats_from_db()
-    summary_details, grand_total = _format_summary_message(stats, 'daily')
-
-    local_tz = pytz.timezone(config.TIMEZONE)
-    yesterday = datetime.now(local_tz) - timedelta(days=1)
-    date_str = yesterday.strftime("%B %d, %Y")
-
-    if grand_total == 0:
-        # Check if there are daily targets set for reference
-        targets = get_leetcode_target('daily')
-        if targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0:
-            target_summary = (
-                f"📊 *Yesterday's Progress Report*\n"
-                f"🗓️ *Date:* {date_str}\n"
-                f"🎯 *Daily Targets (for reference):*\n"
-                f"🟢 Easy: {_format_progress_bar(0, targets['easy'])}\n"
-                f"🟡 Medium: {_format_progress_bar(0, targets['medium'])}\n"
-                f"🔴 Hard: {_format_progress_bar(0, targets['hard'])}\n\n"
-                f"You didn't solve any new problems yesterday. 📅"
-            )
-            await update.message.reply_text(target_summary, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        else:
-            summary_message = f"You didn't solve any new problems on {date_str}. 📅"
-            await update.message.reply_text(summary_message, disable_web_page_preview=True)
-        return
-
-    summary_message = (
-        f"📊 *Yesterday's Progress Report*\n"
-        f"🗓️ *Date:* {date_str}\n"
-        f"🚀 *Progress Overview*\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"{summary_details}\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"🎯 *Grand Total Solved Yesterday:* {grand_total}"
-    )
-    
-    if config.SEND_AS_IMAGE:
-        try:
-            image_bytes = generate_summary_card(
-                "daily", date_str, stats,
-                targets=get_leetcode_target('daily'),
-                extras=_build_summary_extras('daily', yesterday.date())
-            )
-            await update.message.reply_photo(
-                photo=io.BytesIO(image_bytes),
-                caption=summary_message,
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except Exception as img_err:
-            logging.error(f"Failed to generate/send yesterday's stats summary image: {img_err}. Falling back to text.", exc_info=True)
-            await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-    else:
-        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-
-
-async def past_week_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Replies with last week's stats."""
-    stats = get_past_week_stats_from_db()
-    summary_details, grand_total = _format_summary_message(stats, 'weekly')
-
-    # Calculate last week's date range (Monday to Sunday)
-    local_tz = pytz.timezone(config.TIMEZONE)
-    current_date = datetime.now(local_tz)
-    days_since_monday = current_date.weekday()
-    start_of_current_week = current_date - timedelta(days=days_since_monday)
-    start_of_last_week = start_of_current_week - timedelta(days=7)
-    end_of_last_week = start_of_current_week - timedelta(days=1)
-    week_range = f"{start_of_last_week.strftime('%b %d')} - {end_of_last_week.strftime('%b %d, %Y')}"
-
-    if grand_total == 0:
-        # Check if there are weekly targets set for reference
-        targets = get_leetcode_target('weekly')
-        if targets['easy'] > 0 or targets['medium'] > 0 or targets['hard'] > 0:
-            target_summary = (
-                f"📊 *Last Week's Progress Report*\n"
-                f"🗓️ *Period:* {week_range}\n"
-                f"🎯 *Weekly Targets (for reference):*\n"
-                f"🟢 Easy: {_format_progress_bar(0, targets['easy'])}\n"
-                f"🟡 Medium: {_format_progress_bar(0, targets['medium'])}\n"
-                f"🔴 Hard: {_format_progress_bar(0, targets['hard'])}\n\n"
-                f"You didn't solve any new problems last week. 📅"
-            )
-            await update.message.reply_text(target_summary, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-        else:
-            summary_message = f"You didn't solve any new problems last week ({week_range}). 📅"
-            await update.message.reply_text(summary_message, disable_web_page_preview=True)
-        return
-
-    summary_message = (
-        f"📊 *Last Week's Progress Report*\n"
-        f"🗓️ *Period:* {week_range}\n"
-        f"🚀 *Progress Overview*\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"{summary_details}\n\n"
-        f"━━━━━━━━━━━━━━━\n\n"
-        f"🎯 *Grand Total Solved Last Week:* {grand_total}"
-    )
-    
-    if config.SEND_AS_IMAGE:
-        try:
-            image_bytes = generate_summary_card(
-                "weekly", week_range, stats,
-                targets=get_leetcode_target('weekly'),
-                extras=_build_summary_extras('weekly', start_of_last_week.date())
-            )
-            await update.message.reply_photo(
-                photo=io.BytesIO(image_bytes),
-                caption=summary_message,
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except Exception as img_err:
-            logging.error(f"Failed to generate/send last week's stats summary image: {img_err}. Falling back to text.", exc_info=True)
-            await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-    else:
-        await update.message.reply_text(summary_message, disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
-
+past_week_stats_handler = _make_stats_handler(
+    kind="weekly",
+    fetch_stats=lambda: get_past_week_stats_from_db(),
+    heading="Last Week's Progress Report",
+    total_label="Grand Total Solved Last Week",
+    period_label="Period",
+    period_fn=lambda now: _week_range(_start_of_last_week(now)),
+    extras_date_fn=lambda now: _start_of_last_week(now),
+    target_kind="weekly",
+    empty_heading="Last Week's Progress Report",
+    empty_period=True,
+    target_label="Weekly Targets (for reference)",
+    empty_msg="You didn't solve any new problems last week. 📅",
+    empty_no_targets="You didn't solve any new problems last week ({period}). 📅",
+)
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with all available commands."""
@@ -794,166 +669,100 @@ async def ping_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Pong!")
 
 
-async def set_daily_target_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sets daily LeetCode targets. Usage: /dset <easy> <medium> <hard>"""
-    if len(context.args) != 3:
-        await update.message.reply_text(
-            "❌ *Usage:* `/dset <easy> <medium> <hard>`\n"
-            "Example: `/dset 2 1 0` (2 easy, 1 medium, 0 hard per day)",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-    
-    try:
-        easy = int(context.args[0])
-        medium = int(context.args[1])
-        hard = int(context.args[2])
-        
-        if easy < 0 or medium < 0 or hard < 0:
-            await update.message.reply_text("❌ All target values must be non-negative integers.")
-            return
-        
-        success = set_leetcode_target('daily', easy, medium, hard)
-        
-        if success:
-            # Send confirmation to user
+def _make_target_setter(
+    target_type: str,
+    label: str,
+    noun: str,
+    example_args: str,
+    usage_note: str,
+    success_close: str,
+    channel_close: str,
+):
+    """Builds a /dset-style target command handler (dset/wset/mset)."""
+    command = f"{target_type[0]}set"
+
+    async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) != 3:
             await update.message.reply_text(
-                f"✅ *Daily LeetCode Target Set!*\n\n"
-                f"🟢 *Easy:* {easy} problems/day\n"
-                f"🟡 *Medium:* {medium} problems/day\n"
-                f"🔴 *Hard:* {hard} problems/day\n\n"
-                f"Good luck crushing your daily goals! 💪",
+                f"❌ *Usage:* `/{command} <easy> <medium> <hard>`\n"
+                f"Example: `/{command} {example_args}` ({usage_note})",
                 parse_mode=ParseMode.MARKDOWN
             )
-            
-            # Send notification to channel
-            channel_message = (
-                f"🎯 *New Daily Target Set!*\n\n"
-                f"📊 *LeetCode Daily Goals:*\n"
-                f"🟢 Easy: {easy} problems\n"
-                f"🟡 Medium: {medium} problems\n"
-                f"🔴 Hard: {hard} problems\n\n"
-                f"Let's achieve these goals every day! 🚀"
-            )
-            await context.bot.send_message(
-                config.CHANNEL_ID, 
-                channel_message, 
-                disable_web_page_preview=True, 
-                parse_mode=ParseMode.MARKDOWN
-            )
-        else:
-            await update.message.reply_text("❌ Failed to set daily target. Please try again.")
-            
-    except ValueError:
-        await update.message.reply_text("❌ All arguments must be valid integers.")
-
-
-async def set_weekly_target_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sets weekly LeetCode targets. Usage: /wset <easy> <medium> <hard>"""
-    if len(context.args) != 3:
-        await update.message.reply_text(
-            "❌ *Usage:* `/wset <easy> <medium> <hard>`\n"
-            "Example: `/wset 10 5 2` (10 easy, 5 medium, 2 hard per week)",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-    
-    try:
-        easy = int(context.args[0])
-        medium = int(context.args[1])
-        hard = int(context.args[2])
-        
-        if easy < 0 or medium < 0 or hard < 0:
-            await update.message.reply_text("❌ All target values must be non-negative integers.")
             return
-        
-        success = set_leetcode_target('weekly', easy, medium, hard)
-        
-        if success:
-            # Send confirmation to user
-            await update.message.reply_text(
-                f"✅ *Weekly LeetCode Target Set!*\n\n"
-                f"🟢 *Easy:* {easy} problems/week\n"
-                f"🟡 *Medium:* {medium} problems/week\n"
-                f"🔴 *Hard:* {hard} problems/week\n\n"
-                f"Time to dominate this week! 🔥",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            
-            # Send notification to channel
-            channel_message = (
-                f"🎯 *New Weekly Target Set!*\n\n"
-                f"📊 *LeetCode Weekly Goals:*\n"
-                f"🟢 Easy: {easy} problems\n"
-                f"🟡 Medium: {medium} problems\n"
-                f"🔴 Hard: {hard} problems\n\n"
-                f"Let's smash these weekly goals! 💥"
-            )
-            await context.bot.send_message(
-                config.CHANNEL_ID, 
-                channel_message, 
-                disable_web_page_preview=True, 
-                parse_mode=ParseMode.MARKDOWN
-            )
-        else:
-            await update.message.reply_text("❌ Failed to set weekly target. Please try again.")
-            
-    except ValueError:
-        await update.message.reply_text("❌ All arguments must be valid integers.")
+
+        try:
+            easy = int(context.args[0])
+            medium = int(context.args[1])
+            hard = int(context.args[2])
+
+            if easy < 0 or medium < 0 or hard < 0:
+                await update.message.reply_text("❌ All target values must be non-negative integers.")
+                return
+
+            success = set_leetcode_target(target_type, easy, medium, hard)
+
+            if success:
+                await update.message.reply_text(
+                    f"✅ *{label} LeetCode Target Set!*\n\n"
+                    f"🟢 *Easy:* {easy} problems/{noun}\n"
+                    f"🟡 *Medium:* {medium} problems/{noun}\n"
+                    f"🔴 *Hard:* {hard} problems/{noun}\n\n"
+                    f"{success_close}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+
+                channel_message = (
+                    f"🎯 *New {label} Target Set!*\n\n"
+                    f"📊 *LeetCode {label} Goals:*\n"
+                    f"🟢 Easy: {easy} problems\n"
+                    f"🟡 Medium: {medium} problems\n"
+                    f"🔴 Hard: {hard} problems\n\n"
+                    f"{channel_close}"
+                )
+                await context.bot.send_message(
+                    config.CHANNEL_ID,
+                    channel_message,
+                    disable_web_page_preview=True,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                await update.message.reply_text(f"❌ Failed to set {target_type} target. Please try again.")
+
+        except ValueError:
+            await update.message.reply_text("❌ All arguments must be valid integers.")
+
+    return handler
 
 
-async def set_monthly_target_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sets monthly LeetCode targets. Usage: /mset <easy> <medium> <hard>"""
-    if len(context.args) != 3:
-        await update.message.reply_text(
-            "❌ *Usage:* `/mset <easy> <medium> <hard>`\n"
-            "Example: `/mset 40 20 8` (40 easy, 20 medium, 8 hard per month)",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-    
-    try:
-        easy = int(context.args[0])
-        medium = int(context.args[1])
-        hard = int(context.args[2])
-        
-        if easy < 0 or medium < 0 or hard < 0:
-            await update.message.reply_text("❌ All target values must be non-negative integers.")
-            return
-        
-        success = set_leetcode_target('monthly', easy, medium, hard)
-        
-        if success:
-            # Send confirmation to user
-            await update.message.reply_text(
-                f"✅ *Monthly LeetCode Target Set!*\n\n"
-                f"🟢 *Easy:* {easy} problems/month\n"
-                f"🟡 *Medium:* {medium} problems/month\n"
-                f"🔴 *Hard:* {hard} problems/month\n\n"
-                f"Ready to conquer this month! 🏆",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            
-            # Send notification to channel
-            channel_message = (
-                f"🎯 *New Monthly Target Set!*\n\n"
-                f"📊 *LeetCode Monthly Goals:*\n"
-                f"🟢 Easy: {easy} problems\n"
-                f"🟡 Medium: {medium} problems\n"
-                f"🔴 Hard: {hard} problems\n\n"
-                f"Let's achieve greatness this month! 🌟"
-            )
-            await context.bot.send_message(
-                config.CHANNEL_ID, 
-                channel_message, 
-                disable_web_page_preview=True, 
-                parse_mode=ParseMode.MARKDOWN
-            )
-        else:
-            await update.message.reply_text("❌ Failed to set monthly target. Please try again.")
-            
-    except ValueError:
-        await update.message.reply_text("❌ All arguments must be valid integers.")
+set_daily_target_handler = _make_target_setter(
+    target_type="daily",
+    label="Daily",
+    noun="day",
+    example_args="2 1 0",
+    usage_note="2 easy, 1 medium, 0 hard per day",
+    success_close="Good luck crushing your daily goals! 💪",
+    channel_close="Let's achieve these goals every day! 🚀",
+)
+
+set_weekly_target_handler = _make_target_setter(
+    target_type="weekly",
+    label="Weekly",
+    noun="week",
+    example_args="10 5 2",
+    usage_note="10 easy, 5 medium, 2 hard per week",
+    success_close="Time to dominate this week! 🔥",
+    channel_close="Let's smash these weekly goals! 💥",
+)
+
+set_monthly_target_handler = _make_target_setter(
+    target_type="monthly",
+    label="Monthly",
+    noun="month",
+    example_args="40 20 8",
+    usage_note="40 easy, 20 medium, 8 hard per month",
+    success_close="Ready to conquer this month! 🏆",
+    channel_close="Let's achieve greatness this month! 🌟",
+)
 
 def restrict_to_owner(func):
     @wraps(func)
