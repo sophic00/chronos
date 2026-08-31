@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 from functools import wraps
 import calendar
@@ -260,7 +261,8 @@ async def send_summary(bot, kind: str, target_date=None, recovered: bool = False
 
     if message != cfg["none_msg"] and config.SEND_AS_IMAGE:
         try:
-            image_bytes = generate_summary_card(
+            image_bytes = await asyncio.to_thread(
+                generate_summary_card,
                 kind, cfg["period"](target_date), stats,
                 targets=get_leetcode_target(kind),
                 extras=_build_summary_extras(kind, target_date)
@@ -333,7 +335,8 @@ async def test_codeforces_submission(app: Application):
                     solve_dt = datetime.fromtimestamp(
                         submission["creationTimeSeconds"], tz=pytz.timezone(config.TIMEZONE)
                     )
-                    image_bytes = generate_solve_card(
+                    image_bytes = await asyncio.to_thread(
+                        generate_solve_card,
                         platform="Codeforces",
                         title=f"[TEST] {problem['name']}",
                         difficulty=str(rating),
@@ -452,7 +455,8 @@ async def test_leetcode_submission(app: Application):
                     solve_dt = datetime.fromtimestamp(
                         int(sub["timestamp"]), tz=pytz.timezone(config.TIMEZONE)
                     )
-                    image_bytes = generate_solve_card(
+                    image_bytes = await asyncio.to_thread(
+                        generate_solve_card,
                         platform="LeetCode",
                         title=f"[TEST] {sub['title']}",
                         difficulty=difficulty,
@@ -575,7 +579,8 @@ def _make_stats_handler(
 
         if config.SEND_AS_IMAGE:
             try:
-                image_bytes = generate_summary_card(
+                image_bytes = await asyncio.to_thread(
+                    generate_summary_card,
                     kind, period, stats,
                     targets=targets,
                     extras=_build_summary_extras(kind, extras_date_fn(now))

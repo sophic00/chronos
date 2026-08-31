@@ -311,7 +311,8 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                                 solve_dt = datetime.fromtimestamp(
                                     int(sub["timestamp"]), tz=pytz.timezone(config.TIMEZONE)
                                 )
-                                image_bytes = generate_solve_card(
+                                image_bytes = await asyncio.to_thread(
+                                    generate_solve_card,
                                     platform="LeetCode",
                                     title=sub['title'],
                                     difficulty=difficulty if difficulty else "N/A",

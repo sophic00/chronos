@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import logging
@@ -18,6 +19,7 @@ from .data.state_manager import (
 )
 from .integrations.codeforces import get_latest_submission_id, check_codeforces_submissions
 from .integrations.leetcode import get_latest_leetcode_submission_timestamp, check_leetcode_submissions
+from .bot.image_generator import ensure_assets
 from .bot.handlers import (
     register_handlers,
     test_codeforces_submission,
@@ -119,6 +121,9 @@ async def post_initialization(application: Application):
     """
     # --- Shared HTTP client (closed in post_shutdown) ---
     application.bot_data["http_client"] = httpx.AsyncClient(timeout=30.0)
+
+    # --- Pre-fetch card assets (blocking network IO; keep off the event loop) ---
+    await asyncio.to_thread(ensure_assets)
 
     # --- Startup Verification ---
     try:

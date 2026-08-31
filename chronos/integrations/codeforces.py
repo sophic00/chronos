@@ -168,7 +168,8 @@ async def check_codeforces_submissions(
                                     submission["creationTimeSeconds"],
                                     tz=pytz.timezone(config.TIMEZONE),
                                 )
-                                image_bytes = generate_solve_card(
+                                image_bytes = await asyncio.to_thread(
+                                    generate_solve_card,
                                     platform="Codeforces",
                                     title=problem["name"],
                                     difficulty=str(rating),
