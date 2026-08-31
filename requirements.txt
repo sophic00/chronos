@@ -1,8 +1,0 @@
-httpx>=0.28.1
-python-dotenv>=1.1.0
-python-telegram-bot[job-queue]>=22.1
-pytz>=2025.2
-requests>=2.32.3
-sqlalchemy>=2.0.0
-alembic>=1.13.0
-pillow>=10.0.0 

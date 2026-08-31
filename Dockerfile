@@ -1,5 +1,5 @@
 # ---- Base Stage ----
-FROM python:3.11-slim-bookworm AS base
+FROM python:3.12-slim-bookworm AS base
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -12,23 +12,20 @@ WORKDIR /app
 # ---- Builder Stage ----
 FROM base AS builder
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends gcc
-
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+# Install uv and create a lockfile-exact virtualenv (dev deps excluded)
+RUN pip install --no-cache-dir uv
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
 
 # ---- Final Stage ----
 FROM base AS final
 
-# Copy installed packages from the builder stage
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin/ /usr/local/bin/
+# Reuse the resolved environment from the builder stage
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy the application source code
 COPY . .
 
 # The command to run when the container starts
-CMD ["python", "-u", "-m", "chronos.main"] 
+CMD ["python", "-u", "-m", "chronos.main"]
