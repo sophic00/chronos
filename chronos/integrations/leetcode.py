@@ -217,7 +217,7 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
         """,
         "variables": {
             "username": config.LEETCODE_USERNAME,
-            "limit": 15
+            "limit": 30
         }
     }
     cookies = get_leetcode_cookies()
@@ -257,6 +257,14 @@ async def check_leetcode_submissions(context: ContextTypes.DEFAULT_TYPE):
                     and str(sub["id"]) not in boundary_ids
                 )
             ]
+
+            if submissions and last_timestamp != 0:
+                oldest_ts = min(int(s["timestamp"]) for s in submissions)
+                if oldest_ts > last_timestamp:
+                    logging.warning(
+                        f"Oldest fetched LeetCode submission ({oldest_ts}) is newer than the "
+                        f"last processed timestamp ({last_timestamp}); submissions in between may have been missed."
+                    )
             
             if new_submissions:
                 for sub in sorted(new_submissions, key=lambda x: int(x["timestamp"])):

@@ -81,7 +81,7 @@ async def check_codeforces_submissions(
         params_for_sig = {
             "handle": config.CF_HANDLE,
             "from": 1,
-            "count": 10,
+            "count": 20,
             "apiKey": config.CF_API_KEY,
             "time": int(time.time()),
         }
@@ -116,6 +116,14 @@ async def check_codeforces_submissions(
                     and submission.get("verdict") == "OK"
                 ):
                     new_successful_submissions.append(submission)
+
+            if submissions and last_processed_id != 0:
+                oldest_fetched = min(s["id"] for s in submissions)
+                if oldest_fetched > last_processed_id:
+                    logging.warning(
+                        f"Oldest fetched Codeforces submission ({oldest_fetched}) is newer than the "
+                        f"last processed ID ({last_processed_id}); submissions in between may have been missed."
+                    )
 
             if new_successful_submissions:
                 # Process them chronologically
